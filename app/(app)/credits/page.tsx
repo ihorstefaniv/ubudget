@@ -4,23 +4,28 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Tab = "credits" | "deposits" | "archive";
+type CreditType = "consumer" | "car" | "mortgage" | "credit_card" | "installment" | "partpay";
 
 interface Credit {
   id: string;
   user_id: string;
   name: string;
-  bank: string;
-  type: "credit" | "mortgage" | "installment" | "partpay";
+  bank: string | null;
+  type: CreditType;
   total_amount: number;
   remaining_amount: number;
   monthly_payment: number;
   interest_rate: number;
-  real_rate?: number;
+  real_rate: number | null;
   currency: string;
-  payment_day: number;
-  start_date: string;
-  end_date: string;
+  payment_day: number | null;
+  start_date: string | null;
+  end_date: string | null;
   is_archived: boolean;
+  car_model: string | null;
+  car_year: number | null;
+  kasko_amount: number | null;
+  registration_amount: number | null;
 }
 
 interface Deposit {
@@ -31,8 +36,8 @@ interface Deposit {
   amount: number;
   interest_rate: number;
   currency: string;
-  start_date: string;
-  end_date: string;
+  start_date: string | null;
+  end_date: string | null;
   capitalization: boolean;
   coupon_period: string;
   is_archived: boolean;
@@ -45,34 +50,36 @@ function fmt(n: number, cur = "UAH") {
   if (cur === "EUR") return `€${v}`;
   return `${v} грн`;
 }
-
-function daysUntil(dateStr: string) {
-  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
-}
-
+function daysUntil(d: string) { return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000); }
 function daysUntilPayment(day: number) {
   const today = new Date();
   const d = new Date(today.getFullYear(), today.getMonth(), day);
   if (d < today) d.setMonth(d.getMonth() + 1);
   return Math.ceil((d.getTime() - today.getTime()) / 86400000);
 }
-
 function monthsLeft(endDate: string) {
   const end = new Date(endDate), now = new Date();
   return Math.max(0, (end.getFullYear() - now.getFullYear()) * 12 + end.getMonth() - now.getMonth());
 }
-
 function progressPct(remaining: number, total: number) {
   return total > 0 ? Math.round((1 - remaining / total) * 100) : 0;
 }
-
 function depositIncome(d: Deposit) {
-  const months = monthsLeft(d.end_date);
+  const months = d.end_date ? monthsLeft(d.end_date) : 0;
   if (d.capitalization) return d.amount * (Math.pow(1 + d.interest_rate / 100 / 12, months) - 1);
   return d.amount * (d.interest_rate / 100) * (months / 12);
 }
 
 const NBU_RATE = 15.5;
+
+const TYPE_META: Record<CreditType, { label: string; emoji: string }> = {
+  consumer:    { label: "Споживчий",        emoji: "💳" },
+  car:         { label: "Авто кредит",      emoji: "🚗" },
+  mortgage:    { label: "Іпотека",          emoji: "🏠" },
+  credit_card: { label: "Кредитна картка",  emoji: "💳" },
+  installment: { label: "Розтермінування",  emoji: "🛍" },
+  partpay:     { label: "Оплата частинами", emoji: "🛒" },
+};
 
 // ─── Icons ────────────────────────────────────────────────────
 const Icon = ({ d, className = "w-5 h-5" }: { d: string; className?: string }) => (
@@ -85,29 +92,35 @@ const icons = {
   close:  "M6 18L18 6M6 6l12 12",
   edit:   "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z",
   trash:  "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16",
-  warn:   "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
   bell:   "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9",
   trend:  "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
-  check:  "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
+  check:  "M5 13l4 4L19 7",
   loader: "M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83",
 };
 
-// ─── Input / Select / Toggle ──────────────────────────────────
-function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+// ─── UI primitives ────────────────────────────────────────────
+const baseCls = "w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all";
+const errCls  = "w-full px-3 py-2.5 rounded-xl border border-red-400 bg-red-50/40 dark:bg-red-950/10 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-red-400 transition-all";
+
+function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</label>
+    <div className="space-y-1">
+      <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
       {children}
+      {error && <p className="text-xs text-red-500 mt-0.5">{error}</p>}
     </div>
   );
 }
 
-const inputCls = "w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all";
-
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ label, sub, checked, onChange }: { label: string; sub?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-sm text-neutral-700 dark:text-neutral-300">{label}</span>
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <p className="text-sm text-neutral-700 dark:text-neutral-300">{label}</p>
+        {sub && <p className="text-xs text-neutral-400 mt-0.5">{sub}</p>}
+      </div>
       <button onClick={() => onChange(!checked)}
         className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${checked ? "bg-orange-400" : "bg-neutral-200 dark:bg-neutral-700"}`}>
         <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : ""}`} />
@@ -116,101 +129,119 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
+function InfoBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30">
+      {children}
+    </div>
+  );
+}
+
 // ─── Credit Modal ─────────────────────────────────────────────
 function CreditModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: () => void; edit?: Credit }) {
   const supabase = createClient();
   const [saving, setSaving]   = useState(false);
+  const [type, setType]       = useState<CreditType>(edit?.type ?? "consumer");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [type, setType]       = useState<Credit["type"]>(edit?.type ?? "credit");
-  const [firstPayment, setFirstPayment] = useState<"1" | "2">("1"); // для partpay
-  const [hasRate, setHasRate] = useState(false); // для partpay/installment
-  const [form, setForm] = useState({
-    name: edit?.name ?? "", bank: edit?.bank ?? "",
-    total_amount: String(edit?.total_amount ?? ""),
-    remaining_amount: String(edit?.remaining_amount ?? ""),
-    monthly_payment: String(edit?.monthly_payment ?? ""),
-    installments: "",   // кількість частин (partpay/installment)
-    paid_count: "",     // вже сплачено частин
-    interest_rate: String(edit?.interest_rate ?? ""),
-    real_rate: String(edit?.real_rate ?? ""),
-    currency: edit?.currency ?? "UAH",
-    payment_day: String(edit?.payment_day ?? ""),
-    start_date: edit?.start_date ?? "",
-    end_date: edit?.end_date ?? "",
+  const [hasRate, setHasRate] = useState(isInstallT(edit?.type) ? !!(edit?.interest_rate && edit.interest_rate > 0) : true);
+  const [hasRealRate, setHasRealRate] = useState(!!(edit?.real_rate));
+  const [firstPayment, setFirstPayment] = useState<"1" | "2">("1");
+
+  function isInstallT(t?: string) { return t === "installment" || t === "partpay"; }
+  const isInstall = isInstallT(type);
+
+  const [f, setF] = useState({
+    name:                edit?.name ?? "",
+    bank:                edit?.bank ?? "",
+    currency:            edit?.currency ?? "UAH",
+    total_amount:        edit ? String(edit.total_amount) : "",
+    remaining_amount:    edit ? String(edit.remaining_amount) : "",
+    monthly_payment:     edit ? String(edit.monthly_payment) : "",
+    installments:        edit && isInstallT(edit.type) && edit.monthly_payment
+      ? String(Math.round(edit.total_amount / edit.monthly_payment)) : "",
+    paid_count:          edit && isInstallT(edit.type) && edit.monthly_payment
+      ? String(Math.round((edit.total_amount - edit.remaining_amount) / edit.monthly_payment)) : "",
+    interest_rate:       edit ? String(edit.interest_rate) : "",
+    real_rate:           edit?.real_rate ? String(edit.real_rate) : "",
+    payment_day:         edit?.payment_day ? String(edit.payment_day) : "",
+    start_date:          edit?.start_date ?? "",
+    end_date:            edit?.end_date ?? "",
+    car_model:           edit?.car_model ?? "",
+    car_year:            edit?.car_year ? String(edit.car_year) : "",
+    kasko_amount:        edit?.kasko_amount ? String(edit.kasko_amount) : "",
+    registration_amount: edit?.registration_amount ? String(edit.registration_amount) : "",
   });
 
-  const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
+  const upd   = (k: string, v: string) => setF(p => ({ ...p, [k]: v }));
   const touch = (k: string) => setTouched(p => ({ ...p, [k]: true }));
+  const cls   = (k: string) => touched[k] && errs[k] ? errCls : baseCls;
 
-  // Автообчислення щомісячного платежу для partpay/installment
-  const autoMonthly = (type === "partpay" || type === "installment") && form.total_amount && form.installments
-    ? (+form.total_amount / +form.installments).toFixed(2) : "";
+  // ── Derived calculations ──
+  const autoMonthly = isInstall && +f.total_amount > 0 && +f.installments > 0
+    ? +f.total_amount / +f.installments : 0;
 
-  // Валідація
-  const errors: Record<string, string> = {};
-  if (!form.name) errors.name = "Обов'язкове поле";
-  if (!form.total_amount || +form.total_amount <= 0) errors.total_amount = "Вкажіть суму";
-  if (type !== "partpay" && type !== "installment") {
-    if (!form.remaining_amount) errors.remaining_amount = "Обов'язкове поле";
-    else if (+form.remaining_amount > +form.total_amount) errors.remaining_amount = "Не може бути більше загальної суми";
-    if (form.monthly_payment && +form.monthly_payment > +form.remaining_amount) errors.monthly_payment = "Не може бути більше залишку боргу";
-  }
-  if (type === "partpay" || type === "installment") {
-    if (!form.installments || +form.installments <= 0) errors.installments = "Вкажіть кількість частин";
-  }
+  const autoRemaining = isInstall && autoMonthly > 0 && +f.paid_count >= 0
+    ? Math.max(0, +f.total_amount - +f.paid_count * autoMonthly) : null;
 
-  function errCls(k: string) {
-    return touched[k] && errors[k]
-      ? "w-full px-3 py-2.5 rounded-xl border border-red-400 bg-red-50/50 dark:bg-red-950/10 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-red-400 transition-all"
-      : inputCls;
-  }
+  const autoEndDate = (() => {
+    if (!isInstall || !f.start_date || !f.installments) return "";
+    const d = new Date(f.start_date);
+    d.setMonth(d.getMonth() + +f.installments + (firstPayment === "2" ? 1 : 0));
+    return d.toISOString().slice(0, 10);
+  })();
 
-  function ErrMsg({ k }: { k: string }) {
-    return touched[k] && errors[k] ? <p className="text-xs text-red-500 mt-1">{errors[k]}</p> : null;
+  const suggestedMonthly = (() => {
+    if (isInstall || !f.remaining_amount || !f.end_date) return 0;
+    const ml = monthsLeft(f.end_date);
+    return ml > 0 ? Math.ceil(+f.remaining_amount / ml) : 0;
+  })();
+
+  // ── Validation ──
+  const errs: Record<string, string> = {};
+  if (!f.name.trim()) errs.name = "Обов'язкове поле";
+  if (!f.total_amount || +f.total_amount <= 0) errs.total_amount = "Вкажіть суму";
+  if (!isInstall) {
+    if (!f.remaining_amount) errs.remaining_amount = "Обов'язкове поле";
+    else if (+f.remaining_amount > +f.total_amount) errs.remaining_amount = "Не може бути більше загальної суми";
+    if (f.monthly_payment && f.remaining_amount && +f.monthly_payment > +f.remaining_amount)
+      errs.monthly_payment = "Не може бути більше залишку боргу";
+  } else {
+    if (!f.installments || +f.installments <= 0) errs.installments = "Вкажіть кількість частин";
+    if (f.paid_count && +f.paid_count >= +f.installments) errs.paid_count = "Не може бути ≥ кількості частин";
   }
+  if (f.payment_day && (+f.payment_day < 1 || +f.payment_day > 31)) errs.payment_day = "1–31";
 
   async function save() {
-    // Touch all required fields
-    const required = type === "partpay" || type === "installment"
-      ? ["name", "total_amount", "installments"]
-      : ["name", "total_amount", "remaining_amount"];
-    const allTouched = Object.fromEntries(required.map(k => [k, true]));
-    setTouched(p => ({ ...p, ...allTouched }));
-    if (required.some(k => errors[k])) return;
-
+    const req = isInstall ? ["name", "total_amount", "installments"] : ["name", "total_amount", "remaining_amount"];
+    setTouched(Object.fromEntries(req.map(k => [k, true])));
+    if (req.some(k => errs[k])) return;
     setSaving(true);
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
-    const monthly = type === "partpay" || type === "installment"
-      ? (autoMonthly ? +autoMonthly : 0) : (+form.monthly_payment || 0);
+    const monthly   = isInstall ? autoMonthly : (+f.monthly_payment || 0);
+    const remaining = isInstall ? (autoRemaining ?? +f.total_amount) : +f.remaining_amount;
+    const endDate   = isInstall ? (autoEndDate || null) : (f.end_date || null);
 
-    const remaining = type === "partpay" || type === "installment"
-      ? (form.paid_count ? +form.total_amount - (+form.paid_count * monthly) : +form.total_amount)
-      : +form.remaining_amount;
-
-    // Для partpay/installment — розраховуємо end_date з start_date + кількість місяців
-    let endDate = form.end_date || null;
-    if ((type === "partpay" || type === "installment") && form.start_date && form.installments) {
-      const start = new Date(form.start_date);
-      const offset = +form.installments + (firstPayment === "2" ? 1 : 0);
-      start.setMonth(start.getMonth() + offset);
-      endDate = start.toISOString().slice(0, 10);
-    }
-
-    const payload = {
-      user_id: user.id, type, name: form.name,
-      bank: form.bank || "—",
-      total_amount: +form.total_amount,
-      remaining_amount: Math.max(0, remaining),
+    const payload: Record<string, unknown> = {
+      user_id: user.id, type,
+      name: f.name.trim(),
+      bank: f.bank.trim() || null,
+      currency: f.currency,
+      total_amount: +f.total_amount,
+      remaining_amount: remaining,
       monthly_payment: monthly,
-      interest_rate: hasRate || (type === "credit" || type === "mortgage") ? (+form.interest_rate || 0) : 0,
-      real_rate: form.real_rate ? +form.real_rate : null,
-      currency: form.currency,
-      payment_day: form.payment_day ? +form.payment_day : null,
-      start_date: form.start_date || null,
+      interest_rate: (hasRate || !isInstall) ? (+f.interest_rate || 0) : 0,
+      real_rate: hasRealRate && f.real_rate ? +f.real_rate : null,
+      payment_day: f.payment_day ? +f.payment_day : null,
+      start_date: f.start_date || null,
       end_date: endDate,
       is_archived: false,
+      car_model: type === "car" ? (f.car_model || null) : null,
+      car_year: type === "car" && f.car_year ? +f.car_year : null,
+      kasko_amount: type === "car" && f.kasko_amount ? +f.kasko_amount : null,
+      registration_amount: type === "car" && f.registration_amount ? +f.registration_amount : null,
     };
 
     if (edit) await supabase.from("credits").update(payload).eq("id", edit.id);
@@ -221,136 +252,168 @@ function CreditModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved:
     onClose();
   }
 
-  const isPartpayType = type === "partpay" || type === "installment";
-
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto border-t sm:border border-neutral-100 dark:border-neutral-800 shadow-xl">
-        <div className="sticky top-0 bg-white dark:bg-neutral-900 px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
+        <div className="sticky top-0 bg-white dark:bg-neutral-900 px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between z-10">
           <h2 className="font-semibold text-neutral-900 dark:text-neutral-100">{edit ? "Редагувати" : "Нове зобов'язання"}</h2>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 transition-colors"><Icon d={icons.close} className="w-5 h-5" /></button>
         </div>
+
         <div className="px-6 py-5 space-y-4">
-          {/* Type */}
-          <div className="grid grid-cols-2 gap-2">
-            {[{ v: "credit", l: "💳 Кредит" }, { v: "mortgage", l: "🏠 Іпотека" },
-              { v: "installment", l: "🛍 Розтермінування" }, { v: "partpay", l: "🛒 Оплата частинами" }].map(({ v, l }) => (
-              <button key={v} onClick={() => setType(v as Credit["type"])}
-                className={`py-2.5 rounded-xl text-sm font-medium border transition-all ${type === v ? "border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
-                {l}
+          {/* Тип */}
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.entries(TYPE_META) as [CreditType, { label: string; emoji: string }][]).map(([v, m]) => (
+              <button key={v} onClick={() => { setType(v); setHasRate(!isInstallT(v)); }}
+                className={`py-2.5 px-2 rounded-xl text-xs font-medium border transition-all text-center leading-tight ${type === v ? "border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300"}`}>
+                {m.emoji}<br />{m.label}
               </button>
             ))}
           </div>
 
           {/* Назва + Банк */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Field label={<>Назва <span className="text-red-400">*</span></>}>
-                <input value={form.name} onChange={e => set("name", e.target.value)}
-                  onBlur={() => touch("name")} placeholder={isPartpayType ? "iPhone 15 Pro" : "Авто кредит"}
-                  className={errCls("name")} />
-              </Field>
-              <ErrMsg k="name" />
-            </div>
-            <Field label={isPartpayType ? "Магазин" : "Банк"}>
-              <input value={form.bank} onChange={e => set("bank", e.target.value)}
-                placeholder={isPartpayType ? "Monobank / Rozetka" : "Monobank"} className={inputCls} />
+            <Field label="Назва" required error={touched.name ? errs.name : undefined}>
+              <input value={f.name} onChange={e => upd("name", e.target.value)} onBlur={() => touch("name")}
+                placeholder={type === "partpay" ? "iPhone 15 Pro" : type === "car" ? "Авто кредит" : type === "mortgage" ? "Іпотека" : "Назва"}
+                className={cls("name")} />
+            </Field>
+            <Field label={isInstall ? "Магазин / Банк" : "Банк"}>
+              <input value={f.bank} onChange={e => upd("bank", e.target.value)}
+                placeholder={type === "partpay" ? "Rozetka / Mono" : "Monobank"} className={baseCls} />
             </Field>
           </div>
 
-          {/* Partpay / Installment логіка */}
-          {isPartpayType ? (
+          {/* Авто поля */}
+          {type === "car" && (
+            <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
+              <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Деталі авто</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Марка / Модель">
+                  <input value={f.car_model} onChange={e => upd("car_model", e.target.value)} placeholder="Toyota Camry" className={baseCls} />
+                </Field>
+                <Field label="Рік випуску">
+                  <input type="number" value={f.car_year} onChange={e => upd("car_year", e.target.value)} placeholder="2022" min="1990" max="2030" className={baseCls} />
+                </Field>
+                <Field label="КАСКО / рік">
+                  <input type="number" value={f.kasko_amount} onChange={e => upd("kasko_amount", e.target.value)} placeholder="15 000" className={baseCls} />
+                </Field>
+                <Field label="Держреєстрація">
+                  <input type="number" value={f.registration_amount} onChange={e => upd("registration_amount", e.target.value)} placeholder="5 000" className={baseCls} />
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {/* Installment / Partpay */}
+          {isInstall ? (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Field label={<>Загальна сума <span className="text-red-400">*</span></>}>
-                    <input type="number" value={form.total_amount}
-                      onChange={e => set("total_amount", e.target.value)} onBlur={() => touch("total_amount")}
-                      placeholder="48000" className={errCls("total_amount")} />
-                  </Field>
-                  <ErrMsg k="total_amount" />
-                </div>
-                <div>
-                  <Field label={<>Кількість частин <span className="text-red-400">*</span></>}>
-                    <input type="number" value={form.installments}
-                      onChange={e => set("installments", e.target.value)} onBlur={() => touch("installments")}
-                      placeholder="12" min="1" className={errCls("installments")} />
-                  </Field>
-                  <ErrMsg k="installments" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Вже сплачено частин">
-                  <input type="number" value={form.paid_count} onChange={e => set("paid_count", e.target.value)} placeholder="0" min="0" className={inputCls} />
+                <Field label="Загальна сума" required error={touched.total_amount ? errs.total_amount : undefined}>
+                  <input type="number" value={f.total_amount} onChange={e => upd("total_amount", e.target.value)} onBlur={() => touch("total_amount")} placeholder="48 000" className={cls("total_amount")} />
                 </Field>
-                {autoMonthly && (
-                  <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 flex items-center">
-                    <div>
-                      <p className="text-xs text-orange-500 font-medium">Платіж на місяць</p>
-                      <p className="text-lg font-bold text-orange-500">{fmt(+autoMonthly, form.currency)}</p>
-                    </div>
-                  </div>
-                )}
+                <Field label="Кількість частин" required error={touched.installments ? errs.installments : undefined}>
+                  <input type="number" value={f.installments} onChange={e => upd("installments", e.target.value)} onBlur={() => touch("installments")} placeholder="12" min="1" className={cls("installments")} />
+                </Field>
+                <Field label="Вже сплачено частин" error={touched.paid_count ? errs.paid_count : undefined}>
+                  <input type="number" value={f.paid_count} onChange={e => upd("paid_count", e.target.value)} onBlur={() => touch("paid_count")} placeholder="0" min="0" className={cls("paid_count")} />
+                </Field>
+                <Field label="День платежу" error={touched.payment_day ? errs.payment_day : undefined}>
+                  <input type="number" value={f.payment_day} onChange={e => upd("payment_day", e.target.value)} onBlur={() => touch("payment_day")} placeholder="10" min="1" max="31" className={cls("payment_day")} />
+                </Field>
               </div>
-              {/* Модель оплати */}
+
+              {/* Авто-розрахунок */}
+              {autoMonthly > 0 && (
+                <div className="grid grid-cols-2 gap-3">
+                  <InfoBox>
+                    <p className="text-xs text-orange-500 font-medium">Платіж / місяць</p>
+                    <p className="text-lg font-bold text-orange-500 mt-0.5">{fmt(autoMonthly, f.currency)}</p>
+                  </InfoBox>
+                  {autoRemaining !== null && (
+                    <InfoBox>
+                      <p className="text-xs text-orange-500 font-medium">Залишок боргу</p>
+                      <p className="text-lg font-bold text-orange-500 mt-0.5">{fmt(autoRemaining, f.currency)}</p>
+                    </InfoBox>
+                  )}
+                </div>
+              )}
+
+              {/* Перший платіж */}
               <Field label="Перший платіж">
                 <div className="grid grid-cols-2 gap-2">
-                  {[{ v: "1", l: "З 1-го місяця", d: "Одразу" }, { v: "2", l: "З 2-го місяця", d: "Через місяць" }].map(({ v, l, d }) => (
+                  {[{ v: "1", l: "З 1-го місяця" }, { v: "2", l: "З 2-го місяця" }].map(({ v, l }) => (
                     <button key={v} onClick={() => setFirstPayment(v as "1" | "2")}
-                      className={`p-3 rounded-xl border text-left transition-all ${firstPayment === v ? "border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30" : "border-neutral-200 dark:border-neutral-700"}`}>
-                      <p className={`text-sm font-medium ${firstPayment === v ? "text-orange-500" : "text-neutral-700 dark:text-neutral-300"}`}>{l}</p>
-                      <p className="text-xs text-neutral-400 mt-0.5">{d}</p>
+                      className={`py-2.5 rounded-xl text-sm font-medium border transition-all ${firstPayment === v ? "border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
+                      {l}
                     </button>
                   ))}
                 </div>
               </Field>
-              {/* Опційно % */}
+
+              {autoEndDate && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700">
+                  <span className="text-xs text-neutral-400">Дата завершення:</span>
+                  <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                    {new Date(autoEndDate).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" })}
+                  </span>
+                </div>
+              )}
+
+              {/* Опційна ставка */}
               <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
-                <Toggle label="Додати відсоткову ставку" checked={hasRate} onChange={setHasRate} />
+                <Toggle label="Відсоткова ставка" sub="Якщо є комісія або %" checked={hasRate} onChange={setHasRate} />
                 {hasRate && (
                   <Field label="% ставка річна">
-                    <input type="number" value={form.interest_rate} onChange={e => set("interest_rate", e.target.value)} placeholder="0.00" className={inputCls} />
+                    <input type="number" value={f.interest_rate} onChange={e => upd("interest_rate", e.target.value)} placeholder="0.00" className={baseCls} />
                   </Field>
                 )}
               </div>
             </>
           ) : (
-            /* Credit / Mortgage логіка */
+            /* Consumer / Car / Mortgage / Credit card */
             <>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Field label={<>Загальна сума <span className="text-red-400">*</span></>}>
-                    <input type="number" value={form.total_amount}
-                      onChange={e => set("total_amount", e.target.value)} onBlur={() => touch("total_amount")}
-                      placeholder="350000" className={errCls("total_amount")} />
-                  </Field>
-                  <ErrMsg k="total_amount" />
-                </div>
-                <div>
-                  <Field label={<>Залишок боргу <span className="text-red-400">*</span></>}>
-                    <input type="number" value={form.remaining_amount}
-                      onChange={e => set("remaining_amount", e.target.value)} onBlur={() => touch("remaining_amount")}
-                      placeholder="180000" className={errCls("remaining_amount")} />
-                  </Field>
-                  <ErrMsg k="remaining_amount" />
-                </div>
-                <div>
-                  <Field label="Щомісячний платіж">
-                    <input type="number" value={form.monthly_payment}
-                      onChange={e => set("monthly_payment", e.target.value)} onBlur={() => touch("monthly_payment")}
-                      placeholder="9800" className={errCls("monthly_payment")} />
-                  </Field>
-                  <ErrMsg k="monthly_payment" />
-                </div>
-                <Field label="День платежу">
-                  <input type="number" value={form.payment_day} onChange={e => set("payment_day", e.target.value)} placeholder="10" min="1" max="31" className={inputCls} />
+                <Field label="Загальна сума" required error={touched.total_amount ? errs.total_amount : undefined}>
+                  <input type="number" value={f.total_amount} onChange={e => upd("total_amount", e.target.value)} onBlur={() => touch("total_amount")} placeholder="350 000" className={cls("total_amount")} />
                 </Field>
+                <Field label="Залишок боргу" required error={touched.remaining_amount ? errs.remaining_amount : undefined}>
+                  <input type="number" value={f.remaining_amount} onChange={e => upd("remaining_amount", e.target.value)} onBlur={() => touch("remaining_amount")} placeholder="180 000" className={cls("remaining_amount")} />
+                </Field>
+                <Field label="Щомісячний платіж" error={touched.monthly_payment ? errs.monthly_payment : undefined}>
+                  <input type="number" value={f.monthly_payment} onChange={e => upd("monthly_payment", e.target.value)} onBlur={() => touch("monthly_payment")} placeholder="9 800" className={cls("monthly_payment")} />
+                </Field>
+                <Field label="День платежу" error={touched.payment_day ? errs.payment_day : undefined}>
+                  <input type="number" value={f.payment_day} onChange={e => upd("payment_day", e.target.value)} onBlur={() => touch("payment_day")} placeholder="10" min="1" max="31" className={cls("payment_day")} />
+                </Field>
+              </div>
+
+              {/* Підказка щомісячного платежу */}
+              {suggestedMonthly > 0 && !f.monthly_payment && (
+                <button onClick={() => upd("monthly_payment", String(suggestedMonthly))}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-950/30 transition-colors">
+                  <span className="text-xs text-blue-600 dark:text-blue-400">💡 Рекомендований платіж (залишок ÷ місяці)</span>
+                  <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{fmt(suggestedMonthly, f.currency)}</span>
+                </button>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
                 <Field label="% ставка (номінальна)">
-                  <input type="number" value={form.interest_rate} onChange={e => set("interest_rate", e.target.value)} placeholder="19.9" className={inputCls} />
+                  <input type="number" value={f.interest_rate} onChange={e => upd("interest_rate", e.target.value)} placeholder="19.9" className={baseCls} />
                 </Field>
-                <Field label="% ставка (реальна)">
-                  <input type="number" value={form.real_rate} onChange={e => set("real_rate", e.target.value)} placeholder="22.4 (опційно)" className={inputCls} />
-                </Field>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-neutral-500">% ставка (реальна)</label>
+                    <button onClick={() => setHasRealRate(v => !v)} className="text-xs text-orange-400 hover:text-orange-500">
+                      {hasRealRate ? "− прибрати" : "+ додати"}
+                    </button>
+                  </div>
+                  {hasRealRate ? (
+                    <input type="number" value={f.real_rate} onChange={e => upd("real_rate", e.target.value)} placeholder="22.4" className={baseCls} />
+                  ) : (
+                    <div className="px-3 py-2.5 rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700 text-xs text-neutral-400 text-center">опційно</div>
+                  )}
+                </div>
               </div>
             </>
           )}
@@ -359,20 +422,20 @@ function CreditModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved:
           <Field label="Валюта">
             <div className="flex gap-2">
               {["UAH", "USD", "EUR"].map(c => (
-                <button key={c} onClick={() => set("currency", c)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${form.currency === c ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>{c}</button>
+                <button key={c} onClick={() => upd("currency", c)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${f.currency === c ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>{c}</button>
               ))}
             </div>
           </Field>
 
           {/* Дати */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${!isInstall ? "grid-cols-2" : "grid-cols-1"}`}>
             <Field label="Дата відкриття">
-              <input type="date" value={form.start_date} onChange={e => set("start_date", e.target.value)} className={inputCls} />
+              <input type="date" value={f.start_date} onChange={e => upd("start_date", e.target.value)} className={baseCls} />
             </Field>
-            {!isPartpayType && (
+            {!isInstall && (
               <Field label="Дата закриття">
-                <input type="date" value={form.end_date} onChange={e => set("end_date", e.target.value)} className={inputCls} />
+                <input type="date" value={f.end_date} onChange={e => upd("end_date", e.target.value)} className={baseCls} />
               </Field>
             )}
           </div>
@@ -391,37 +454,50 @@ function CreditModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved:
 function DepositModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: () => void; edit?: Deposit }) {
   const supabase = createClient();
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [cap, setCap] = useState(edit?.capitalization ?? true);
+  const [f, setF] = useState({
     name: edit?.name ?? "", bank: edit?.bank ?? "",
-    amount: String(edit?.amount ?? ""),
-    interest_rate: String(edit?.interest_rate ?? ""),
+    amount: edit ? String(edit.amount) : "",
+    interest_rate: edit ? String(edit.interest_rate) : "",
     currency: edit?.currency ?? "UAH",
     start_date: edit?.start_date ?? "",
     end_date: edit?.end_date ?? "",
     coupon_period: edit?.coupon_period ?? "monthly",
   });
-  const [cap, setCap]         = useState(edit?.capitalization ?? true);
-  const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
-  const months = form.end_date && form.start_date
-    ? Math.max(0, (new Date(form.end_date).getFullYear() - new Date(form.start_date).getFullYear()) * 12
-        + new Date(form.end_date).getMonth() - new Date(form.start_date).getMonth()) : 0;
-  const preview = form.amount && form.interest_rate
-    ? (cap ? +form.amount * (Math.pow(1 + +form.interest_rate / 100 / 12, months) - 1)
-           : +form.amount * (+form.interest_rate / 100) * (months / 12)) : 0;
+  const upd   = (k: string, v: string) => setF(p => ({ ...p, [k]: v }));
+  const touch = (k: string) => setTouched(p => ({ ...p, [k]: true }));
+
+  const errs: Record<string, string> = {};
+  if (!f.name.trim()) errs.name = "Обов'язкове поле";
+  if (!f.amount || +f.amount <= 0) errs.amount = "Вкажіть суму";
+  if (!f.interest_rate || +f.interest_rate <= 0) errs.interest_rate = "Вкажіть ставку";
+
+  const cls = (k: string) => touched[k] && errs[k] ? errCls : baseCls;
+
+  const months = f.end_date && f.start_date
+    ? Math.max(0, (new Date(f.end_date).getFullYear() - new Date(f.start_date).getFullYear()) * 12
+        + new Date(f.end_date).getMonth() - new Date(f.start_date).getMonth()) : 0;
+  const preview = f.amount && f.interest_rate
+    ? (cap ? +f.amount * (Math.pow(1 + +f.interest_rate / 100 / 12, months) - 1)
+           : +f.amount * (+f.interest_rate / 100) * (months / 12)) : 0;
 
   async function save() {
-    if (!form.name || !form.bank || !form.amount) return;
+    const req = ["name", "amount", "interest_rate"];
+    setTouched(Object.fromEntries(req.map(k => [k, true])));
+    if (req.some(k => errs[k])) return;
     setSaving(true);
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
     const payload = {
-      user_id: user.id, name: form.name, bank: form.bank,
-      amount: +form.amount, interest_rate: +form.interest_rate || 0,
-      currency: form.currency, start_date: form.start_date || null,
-      end_date: form.end_date || null, capitalization: cap,
-      coupon_period: form.coupon_period, is_archived: false,
+      user_id: user.id, name: f.name.trim(), bank: f.bank.trim() || null,
+      amount: +f.amount, interest_rate: +f.interest_rate,
+      currency: f.currency, start_date: f.start_date || null,
+      end_date: f.end_date || null, capitalization: cap,
+      coupon_period: f.coupon_period, is_archived: false,
     };
 
     if (edit) await supabase.from("deposits").update(payload).eq("id", edit.id);
@@ -435,47 +511,64 @@ function DepositModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto border-t sm:border border-neutral-100 dark:border-neutral-800 shadow-xl">
-        <div className="sticky top-0 bg-white dark:bg-neutral-900 px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
+        <div className="sticky top-0 bg-white dark:bg-neutral-900 px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between z-10">
           <h2 className="font-semibold text-neutral-900 dark:text-neutral-100">{edit ? "Редагувати депозит" : "Новий депозит"}</h2>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 transition-colors"><Icon d={icons.close} className="w-5 h-5" /></button>
         </div>
         <div className="px-6 py-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Назва"><input value={form.name} onChange={e => set("name", e.target.value)} placeholder="Основний депозит" className={inputCls} /></Field>
-            <Field label="Банк"><input value={form.bank} onChange={e => set("bank", e.target.value)} placeholder="ПриватБанк" className={inputCls} /></Field>
-            <Field label="Сума"><input type="number" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="100000" className={inputCls} /></Field>
-            <Field label="% ставка річна"><input type="number" value={form.interest_rate} onChange={e => set("interest_rate", e.target.value)} placeholder="14.5" className={inputCls} /></Field>
-            <Field label="Дата відкриття"><input type="date" value={form.start_date} onChange={e => set("start_date", e.target.value)} className={inputCls} /></Field>
-            <Field label="Дата закриття"><input type="date" value={form.end_date} onChange={e => set("end_date", e.target.value)} className={inputCls} /></Field>
+            <Field label="Назва" required error={touched.name ? errs.name : undefined}>
+              <input value={f.name} onChange={e => upd("name", e.target.value)} onBlur={() => touch("name")} placeholder="Основний депозит" className={cls("name")} />
+            </Field>
+            <Field label="Банк">
+              <input value={f.bank} onChange={e => upd("bank", e.target.value)} placeholder="ПриватБанк" className={baseCls} />
+            </Field>
+            <Field label="Сума" required error={touched.amount ? errs.amount : undefined}>
+              <input type="number" value={f.amount} onChange={e => upd("amount", e.target.value)} onBlur={() => touch("amount")} placeholder="100 000" className={cls("amount")} />
+            </Field>
+            <Field label="% ставка річна" required error={touched.interest_rate ? errs.interest_rate : undefined}>
+              <input type="number" value={f.interest_rate} onChange={e => upd("interest_rate", e.target.value)} onBlur={() => touch("interest_rate")} placeholder="14.5" className={cls("interest_rate")} />
+            </Field>
+            <Field label="Дата відкриття">
+              <input type="date" value={f.start_date} onChange={e => upd("start_date", e.target.value)} className={baseCls} />
+            </Field>
+            <Field label="Дата закриття">
+              <input type="date" value={f.end_date} onChange={e => upd("end_date", e.target.value)} className={baseCls} />
+            </Field>
           </div>
+
           <Field label="Валюта">
             <div className="flex gap-2">
               {["UAH", "USD", "EUR"].map(c => (
-                <button key={c} onClick={() => set("currency", c)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${form.currency === c ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>{c}</button>
+                <button key={c} onClick={() => upd("currency", c)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${f.currency === c ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>{c}</button>
               ))}
             </div>
           </Field>
+
           <Field label="Нарахування відсотків">
             <div className="grid grid-cols-3 gap-2">
               {[{ v: "monthly", l: "Щомісяця" }, { v: "quarterly", l: "Квартально" }, { v: "end", l: "В кінці" }].map(({ v, l }) => (
-                <button key={v} onClick={() => set("coupon_period", v)}
-                  className={`py-2 rounded-xl text-xs font-medium border transition-all ${form.coupon_period === v ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>{l}</button>
+                <button key={v} onClick={() => upd("coupon_period", v)}
+                  className={`py-2 rounded-xl text-xs font-medium border transition-all ${f.coupon_period === v ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>{l}</button>
               ))}
             </div>
           </Field>
+
           <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700">
-            <Toggle label="Капіталізація відсотків" checked={cap} onChange={setCap} />
+            <Toggle label="Капіталізація відсотків" sub="Відсотки нараховуються на відсотки" checked={cap} onChange={setCap} />
           </div>
+
           {preview > 0 && (
             <div className="p-4 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30">
               <p className="text-xs text-green-600 dark:text-green-400 font-medium">Очікуваний дохід за {months} міс.</p>
-              <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-0.5">+{fmt(preview, form.currency)}</p>
+              <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-0.5">+{fmt(preview, f.currency)}</p>
             </div>
           )}
+
           <button onClick={save} disabled={saving}
             className="w-full py-3.5 rounded-xl bg-orange-400 text-white text-sm font-bold hover:bg-orange-500 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-            {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : edit ? "Зберегти" : "Додати депозит"}
+            {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : edit ? "Зберегти зміни" : "Додати депозит"}
           </button>
         </div>
       </div>
@@ -486,14 +579,13 @@ function DepositModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved
 // ─── Credits Tab ──────────────────────────────────────────────
 function CreditsTab({ credits, onReload }: { credits: Credit[]; onReload: () => void }) {
   const supabase = createClient();
-  const [modal, setModal]     = useState(false);
+  const [modal, setModal]       = useState(false);
   const [editItem, setEditItem] = useState<Credit | undefined>();
 
-  const active = credits.filter(c => !c.is_archived);
+  const active       = credits.filter(c => !c.is_archived);
   const totalDebt    = active.reduce((s, c) => s + Number(c.remaining_amount), 0);
   const monthlyLoad  = active.reduce((s, c) => s + Number(c.monthly_payment), 0);
-  const upcoming     = active.filter(c => c.payment_day && daysUntilPayment(c.payment_day) <= 7);
-  const typeLabels: Record<string, string> = { credit: "Кредит", mortgage: "Іпотека", installment: "Розтермінування", partpay: "Оплата частинами" };
+  const upcoming     = active.filter(c => c.payment_day != null && daysUntilPayment(c.payment_day!) <= 7);
 
   async function archive(id: string) {
     await supabase.from("credits").update({ is_archived: true }).eq("id", id);
@@ -502,11 +594,12 @@ function CreditsTab({ credits, onReload }: { credits: Credit[]; onReload: () => 
 
   return (
     <div className="space-y-5">
+      {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: "Загальний борг",         value: fmt(totalDebt),        color: "text-red-500",                                       bg: "bg-red-50 dark:bg-red-950/20" },
-          { label: "Щомісячне навантаження", value: fmt(monthlyLoad),      color: "text-orange-500",                                    bg: "bg-orange-50 dark:bg-orange-950/20" },
-          { label: "Активних кредитів",      value: String(active.length), color: "text-neutral-900 dark:text-neutral-100",             bg: "bg-neutral-50 dark:bg-neutral-800" },
+          { label: "Загальний борг",         value: fmt(totalDebt),          color: "text-red-500",    bg: "bg-red-50 dark:bg-red-950/20" },
+          { label: "Щомісячне навантаження", value: fmt(monthlyLoad),        color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950/20" },
+          { label: "Активних кредитів",      value: String(active.length),   color: "text-neutral-900 dark:text-neutral-100", bg: "bg-neutral-50 dark:bg-neutral-800" },
           { label: "Платежів цього тижня",   value: String(upcoming.length), color: upcoming.length > 0 ? "text-amber-500" : "text-green-500", bg: upcoming.length > 0 ? "bg-amber-50 dark:bg-amber-950/20" : "bg-green-50 dark:bg-green-950/20" },
         ].map(({ label, value, color, bg }) => (
           <div key={label} className={`rounded-2xl border border-neutral-100 dark:border-neutral-800 p-4 ${bg}`}>
@@ -516,20 +609,24 @@ function CreditsTab({ credits, onReload }: { credits: Credit[]; onReload: () => 
         ))}
       </div>
 
+      {/* Reminders */}
       {upcoming.length > 0 && (
         <div className="space-y-2">
           {upcoming.map(c => (
             <div key={c.id} className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
               <Icon d={icons.bell} className="w-5 h-5 text-amber-500 shrink-0" />
               <div className="flex-1">
-                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Платіж через {daysUntilPayment(c.payment_day)} дн.: {c.name}</p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">{c.bank} · {fmt(c.monthly_payment, c.currency)}</p>
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                  Платіж через {daysUntilPayment(c.payment_day!)} дн.: {c.name}
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">{c.bank ?? ""} · {fmt(Number(c.monthly_payment), c.currency)}</p>
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* List */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 overflow-hidden">
         <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
           <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">Поточні зобов'язання</h3>
@@ -548,16 +645,27 @@ function CreditsTab({ credits, onReload }: { credits: Credit[]; onReload: () => 
           <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
             {active.map(c => {
               const pct = progressPct(Number(c.remaining_amount), Number(c.total_amount));
-              const daysLeft = c.payment_day ? daysUntilPayment(c.payment_day) : null;
+              const meta = TYPE_META[c.type] ?? { label: c.type, emoji: "💳" };
+              const ml = c.end_date ? monthsLeft(c.end_date) : null;
+              const daysLeft = c.payment_day != null ? daysUntilPayment(c.payment_day) : null;
+              const isInstallC = c.type === "installment" || c.type === "partpay";
+              const installCount = isInstallC && c.monthly_payment > 0
+                ? Math.round(c.total_amount / c.monthly_payment) : null;
+              const paidCount = isInstallC && c.monthly_payment > 0
+                ? Math.round((c.total_amount - c.remaining_amount) / c.monthly_payment) : null;
+
               return (
                 <div key={c.id} className="group p-5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-base">{meta.emoji}</span>
                         <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{c.name}</p>
-                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 dark:bg-green-950/20 text-green-600">Активний</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500">{meta.label}</span>
                       </div>
-                      <p className="text-xs text-neutral-400 mt-0.5">{c.bank} · {typeLabels[c.type] ?? c.type} · {c.currency}</p>
+                      <p className="text-xs text-neutral-400 mt-0.5">
+                        {[c.bank, c.currency, c.type === "car" && c.car_model ? c.car_model : null].filter(Boolean).join(" · ")}
+                      </p>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                       <button onClick={() => { setEditItem(c); setModal(true); }}
@@ -570,28 +678,65 @@ function CreditsTab({ credits, onReload }: { credits: Credit[]; onReload: () => 
                       </button>
                     </div>
                   </div>
+
+                  {/* Progress */}
                   <div className="mb-3">
                     <div className="flex justify-between text-xs text-neutral-400 mb-1.5">
-                      <span>Погашено {pct}%</span>
-                      <span>{fmt(Number(c.remaining_amount), c.currency)} з {fmt(Number(c.total_amount), c.currency)}</span>
+                      <span>
+                        {isInstallC && installCount
+                          ? `${paidCount ?? 0} з ${installCount} частин`
+                          : `Погашено ${pct}%`}
+                      </span>
+                      <span>{fmt(Number(c.remaining_amount), c.currency)} залишок</span>
                     </div>
                     <div className="h-2 rounded-full bg-neutral-100 dark:bg-neutral-800">
                       <div className="h-2 rounded-full bg-gradient-to-r from-orange-400 to-orange-300 transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
+
+                  {/* Details */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                      { label: "Щомісяця",          value: fmt(Number(c.monthly_payment), c.currency) },
-                      { label: "Ставка",             value: c.real_rate ? `${c.interest_rate}% / ${c.real_rate}% реал.` : `${c.interest_rate}%` },
-                      { label: "Наступний платіж",   value: daysLeft !== null ? `${c.payment_day} числа · ${daysLeft} дн.` : "—" },
-                      { label: "Залишилось місяців", value: c.end_date ? `${monthsLeft(c.end_date)} міс.` : "—" },
-                    ].map(({ label, value }) => (
-                      <div key={label}>
-                        <p className="text-xs text-neutral-400">{label}</p>
-                        <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 mt-0.5">{value}</p>
-                      </div>
-                    ))}
+                    <div>
+                      <p className="text-xs text-neutral-400">Щомісяця</p>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 mt-0.5">{fmt(Number(c.monthly_payment), c.currency)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-neutral-400">Ставка</p>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 mt-0.5">
+                        {c.interest_rate > 0 ? `${c.interest_rate}%${c.real_rate ? ` / ${c.real_rate}%` : ""}` : "Безвідс."}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-neutral-400">{c.payment_day ? "Наступний платіж" : "Дата закриття"}</p>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 mt-0.5">
+                        {daysLeft !== null ? `${c.payment_day} числа · ${daysLeft} дн.` : ml !== null ? `${ml} міс.` : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-neutral-400">{isInstallC ? "Загальна сума" : "Залишок міс."}</p>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 mt-0.5">
+                        {isInstallC ? fmt(Number(c.total_amount), c.currency) : ml !== null ? `${ml} міс.` : "—"}
+                      </p>
+                    </div>
                   </div>
+
+                  {/* Авто — каско */}
+                  {c.type === "car" && (c.kasko_amount || c.registration_amount) && (
+                    <div className="mt-3 pt-3 border-t border-neutral-50 dark:border-neutral-800/50 flex flex-wrap gap-3">
+                      {c.kasko_amount && (
+                        <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+                          <span>🛡 КАСКО:</span>
+                          <span className="font-medium text-neutral-700 dark:text-neutral-300">{fmt(Number(c.kasko_amount), c.currency)}/рік</span>
+                        </div>
+                      )}
+                      {c.registration_amount && (
+                        <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+                          <span>📋 Реєстрація:</span>
+                          <span className="font-medium text-neutral-700 dark:text-neutral-300">{fmt(Number(c.registration_amount), c.currency)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -600,21 +745,21 @@ function CreditsTab({ credits, onReload }: { credits: Credit[]; onReload: () => 
       </div>
 
       {/* Monthly schedule */}
-      {active.length > 0 && (
+      {active.filter(c => c.payment_day).length > 0 && (
         <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-6">
           <h3 className="font-semibold text-neutral-900 dark:text-neutral-100 mb-4">Графік платежів цього місяця</h3>
           <div className="space-y-2">
-            {active.filter(c => c.payment_day).sort((a, b) => a.payment_day - b.payment_day).map(c => (
+            {active.filter(c => c.payment_day).sort((a, b) => (a.payment_day ?? 0) - (b.payment_day ?? 0)).map(c => (
               <div key={c.id} className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
-                  daysUntilPayment(c.payment_day) <= 3 ? "bg-amber-100 dark:bg-amber-950/30 text-amber-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400"}`}>
+                  daysUntilPayment(c.payment_day!) <= 3 ? "bg-amber-100 dark:bg-amber-950/30 text-amber-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400"}`}>
                   {c.payment_day}
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{c.name}</p>
-                  <p className="text-xs text-neutral-400">{c.bank}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate">{c.name}</p>
+                  <p className="text-xs text-neutral-400">{c.bank ?? TYPE_META[c.type]?.label}</p>
                 </div>
-                <p className="text-sm font-bold text-red-500">−{fmt(Number(c.monthly_payment), c.currency)}</p>
+                <p className="text-sm font-bold text-red-500 shrink-0">−{fmt(Number(c.monthly_payment), c.currency)}</p>
               </div>
             ))}
             <div className="pt-3 mt-3 border-t border-neutral-100 dark:border-neutral-800 flex justify-between">
@@ -636,12 +781,11 @@ function DepositsTab({ deposits, onReload }: { deposits: Deposit[]; onReload: ()
   const [modal, setModal]       = useState(false);
   const [editItem, setEditItem] = useState<Deposit | undefined>();
 
-  const active    = deposits.filter(d => !d.is_archived);
-  const totalUAH  = active.filter(d => d.currency === "UAH").reduce((s, d) => s + Number(d.amount), 0);
+  const active      = deposits.filter(d => !d.is_archived);
+  const totalUAH    = active.filter(d => d.currency === "UAH").reduce((s, d) => s + Number(d.amount), 0);
   const totalIncome = active.reduce((s, d) => s + depositIncome(d), 0);
-  const avgRate   = active.filter(d => d.currency === "UAH").length
-    ? active.filter(d => d.currency === "UAH").reduce((s, d) => s + Number(d.interest_rate), 0) / active.filter(d => d.currency === "UAH").length
-    : 0;
+  const uahDeps     = active.filter(d => d.currency === "UAH");
+  const avgRate     = uahDeps.length ? uahDeps.reduce((s, d) => s + Number(d.interest_rate), 0) / uahDeps.length : 0;
   const closingSoon = active.filter(d => d.end_date && daysUntil(d.end_date) <= 30);
 
   async function archive(id: string) {
@@ -675,27 +819,23 @@ function DepositsTab({ deposits, onReload }: { deposits: Deposit[]; onReload: ()
               <p className={`text-sm font-semibold ${avgRate >= NBU_RATE ? "text-green-600 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`}>
                 {avgRate >= NBU_RATE ? "✅ Дохідність вища за ставку НБУ" : "⚠️ Дохідність нижча за ставку НБУ"}
               </p>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                Ваша середня: <strong>{avgRate.toFixed(1)}%</strong> · Ставка НБУ: <strong>{NBU_RATE}%</strong> · Різниця: <strong className={avgRate >= NBU_RATE ? "text-green-500" : "text-red-500"}>{(avgRate - NBU_RATE).toFixed(1)}%</strong>
+              <p className="text-xs text-neutral-500 mt-1">
+                Ваша: <strong>{avgRate.toFixed(1)}%</strong> · НБУ: <strong>{NBU_RATE}%</strong> · Різниця: <strong className={avgRate >= NBU_RATE ? "text-green-500" : "text-red-500"}>{(avgRate - NBU_RATE).toFixed(1)}%</strong>
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {closingSoon.length > 0 && (
-        <div className="space-y-2">
-          {closingSoon.map(d => (
-            <div key={d.id} className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
-              <Icon d={icons.bell} className="w-5 h-5 text-amber-500 shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Депозит закінчується через {daysUntil(d.end_date)} дн.: {d.name}</p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">{d.bank} · {fmt(Number(d.amount), d.currency)} · {d.interest_rate}%</p>
-              </div>
-            </div>
-          ))}
+      {closingSoon.length > 0 && closingSoon.map(d => (
+        <div key={d.id} className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
+          <Icon d={icons.bell} className="w-5 h-5 text-amber-500 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Депозит закінчується через {daysUntil(d.end_date!)} дн.: {d.name}</p>
+            <p className="text-xs text-amber-600">{d.bank} · {fmt(Number(d.amount), d.currency)} · {d.interest_rate}%</p>
+          </div>
         </div>
-      )}
+      ))}
 
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 overflow-hidden">
         <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
@@ -708,15 +848,14 @@ function DepositsTab({ deposits, onReload }: { deposits: Deposit[]; onReload: ()
 
         {active.length === 0 ? (
           <div className="text-center py-12 text-neutral-400">
-            <p className="text-3xl mb-2">🏦</p>
-            <p className="text-sm">Немає активних депозитів</p>
+            <p className="text-3xl mb-2">🏦</p><p className="text-sm">Немає активних депозитів</p>
           </div>
         ) : (
           <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
             {active.map(d => {
-              const income  = depositIncome(d);
-              const dLeft   = d.end_date ? daysUntil(d.end_date) : null;
-              const mLeft   = d.end_date ? monthsLeft(d.end_date) : 0;
+              const income = depositIncome(d);
+              const dLeft  = d.end_date ? daysUntil(d.end_date) : null;
+              const mLeft  = d.end_date ? monthsLeft(d.end_date) : 0;
               return (
                 <div key={d.id} className="group p-5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors">
                   <div className="flex items-start justify-between gap-3 mb-3">
@@ -745,10 +884,10 @@ function DepositsTab({ deposits, onReload }: { deposits: Deposit[]; onReload: ()
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: "Сума",        value: fmt(Number(d.amount), d.currency) },
-                      { label: "Ставка",      value: `${d.interest_rate}%` },
-                      { label: "Дохід",       value: `+${fmt(income, d.currency)}`, green: true },
-                      { label: "Закривається", value: d.end_date ? `${new Date(d.end_date).toLocaleDateString("uk-UA")} · ${mLeft} міс.` : "—" },
+                      { label: "Сума",         value: fmt(Number(d.amount), d.currency) },
+                      { label: "Ставка",        value: `${d.interest_rate}%` },
+                      { label: "Дохід",         value: `+${fmt(income, d.currency)}`, green: true },
+                      { label: "Закривається",  value: d.end_date ? `${new Date(d.end_date).toLocaleDateString("uk-UA")} · ${mLeft} міс.` : "—" },
                     ].map(({ label, value, green }) => (
                       <div key={label}>
                         <p className="text-xs text-neutral-400">{label}</p>
@@ -758,7 +897,7 @@ function DepositsTab({ deposits, onReload }: { deposits: Deposit[]; onReload: ()
                   </div>
                   <div className="mt-3 pt-3 border-t border-neutral-50 dark:border-neutral-800/50">
                     <span className={`text-xs px-2 py-0.5 rounded-lg font-medium ${Number(d.interest_rate) >= NBU_RATE ? "bg-green-100 dark:bg-green-950/20 text-green-600" : "bg-amber-100 dark:bg-amber-950/20 text-amber-600"}`}>
-                      {Number(d.interest_rate) >= NBU_RATE ? `+${(Number(d.interest_rate) - NBU_RATE).toFixed(1)}% до НБУ` : `${(Number(d.interest_rate) - NBU_RATE).toFixed(1)}% до НБУ`}
+                      {Number(d.interest_rate) >= NBU_RATE ? "+" : ""}{(Number(d.interest_rate) - NBU_RATE).toFixed(1)}% до НБУ
                     </span>
                   </div>
                 </div>
@@ -776,12 +915,12 @@ function DepositsTab({ deposits, onReload }: { deposits: Deposit[]; onReload: ()
 // ─── Archive Tab ──────────────────────────────────────────────
 function ArchiveTab({ credits, deposits }: { credits: Credit[]; deposits: Deposit[] }) {
   const [filter, setFilter] = useState<"all" | "credits" | "deposits">("all");
-  const closedCredits  = credits.filter(c => c.is_archived);
-  const closedDeposits = deposits.filter(d => d.is_archived);
-  const typeLabels: Record<string, string> = { credit: "Кредит", mortgage: "Іпотека", installment: "Розтермінування", partpay: "Оплата частинами" };
-  const totalPaid   = closedCredits.reduce((s, c) => s + Number(c.total_amount), 0);
-  const totalEarned = closedDeposits.reduce((s, d) => {
-    const years = d.start_date && d.end_date ? (new Date(d.end_date).getTime() - new Date(d.start_date).getTime()) / (1000 * 60 * 60 * 24 * 365) : 0;
+  const archivedCredits  = credits.filter(c => c.is_archived);
+  const archivedDeposits = deposits.filter(d => d.is_archived);
+  const totalPaid   = archivedCredits.reduce((s, c) => s + Number(c.total_amount), 0);
+  const totalEarned = archivedDeposits.reduce((s, d) => {
+    const years = d.start_date && d.end_date
+      ? (new Date(d.end_date).getTime() - new Date(d.start_date).getTime()) / (1000 * 60 * 60 * 24 * 365) : 0;
     return s + Number(d.amount) * (Number(d.interest_rate) / 100) * years;
   }, 0);
 
@@ -789,7 +928,7 @@ function ArchiveTab({ credits, deposits }: { credits: Credit[]; deposits: Deposi
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-4">
-          <p className="text-xl font-bold text-neutral-900 dark:text-neutral-100">{closedCredits.length + closedDeposits.length}</p>
+          <p className="text-xl font-bold text-neutral-900 dark:text-neutral-100">{archivedCredits.length + archivedDeposits.length}</p>
           <p className="text-xs text-neutral-400 mt-0.5">Закритих інструментів</p>
         </div>
         <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-4">
@@ -809,40 +948,41 @@ function ArchiveTab({ credits, deposits }: { credits: Credit[]; deposits: Deposi
         ))}
       </div>
 
-      {(filter === "all" || filter === "credits") && closedCredits.length > 0 && (
+      {(filter === "all" || filter === "credits") && archivedCredits.length > 0 && (
         <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 overflow-hidden">
           <div className="px-6 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/20">
             <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Закриті кредити</p>
           </div>
           <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
-            {closedCredits.map(c => (
-              <div key={c.id} className="flex items-center gap-4 px-5 py-4">
-                <div className="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0">
-                  <Icon d={icons.check} className="w-4 h-4 text-neutral-400" />
+            {archivedCredits.map(c => {
+              const meta = TYPE_META[c.type] ?? { label: c.type, emoji: "💳" };
+              return (
+                <div key={c.id} className="flex items-center gap-4 px-5 py-4">
+                  <div className="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-base shrink-0">{meta.emoji}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{c.name}</p>
+                    <p className="text-xs text-neutral-400">{c.bank ?? meta.label} · {c.interest_rate > 0 ? `${c.interest_rate}%` : "Безвідс."}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold text-neutral-500">{fmt(Number(c.total_amount), c.currency)}</p>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-400 shrink-0">Закрито</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{c.name}</p>
-                  <p className="text-xs text-neutral-400">{c.bank} · {typeLabels[c.type] ?? c.type} · {c.interest_rate > 0 ? `${c.interest_rate}%` : "Безвідсотково"}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-semibold text-neutral-500">{fmt(Number(c.total_amount), c.currency)}</p>
-                  {c.start_date && <p className="text-xs text-neutral-400">{new Date(c.start_date).getFullYear()} — {c.end_date ? new Date(c.end_date).getFullYear() : "?"}</p>}
-                </div>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-400 shrink-0">Закрито</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {(filter === "all" || filter === "deposits") && closedDeposits.length > 0 && (
+      {(filter === "all" || filter === "deposits") && archivedDeposits.length > 0 && (
         <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 overflow-hidden">
           <div className="px-6 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/20">
             <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Закриті депозити</p>
           </div>
           <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
-            {closedDeposits.map(d => {
-              const years = d.start_date && d.end_date ? (new Date(d.end_date).getTime() - new Date(d.start_date).getTime()) / (1000 * 60 * 60 * 24 * 365) : 0;
+            {archivedDeposits.map(d => {
+              const years = d.start_date && d.end_date
+                ? (new Date(d.end_date).getTime() - new Date(d.start_date).getTime()) / (1000 * 60 * 60 * 24 * 365) : 0;
               const earned = Number(d.amount) * (Number(d.interest_rate) / 100) * years;
               return (
                 <div key={d.id} className="flex items-center gap-4 px-5 py-4">
@@ -855,7 +995,7 @@ function ArchiveTab({ credits, deposits }: { credits: Credit[]; deposits: Deposi
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-semibold text-neutral-600 dark:text-neutral-300">{fmt(Number(d.amount), d.currency)}</p>
-                    <p className="text-xs text-green-500">+{fmt(earned, d.currency)} дохід</p>
+                    <p className="text-xs text-green-500">+{fmt(earned, d.currency)}</p>
                   </div>
                 </div>
               );
@@ -864,10 +1004,9 @@ function ArchiveTab({ credits, deposits }: { credits: Credit[]; deposits: Deposi
         </div>
       )}
 
-      {closedCredits.length === 0 && closedDeposits.length === 0 && (
+      {archivedCredits.length === 0 && archivedDeposits.length === 0 && (
         <div className="text-center py-16 text-neutral-400">
-          <p className="text-4xl mb-3">📂</p>
-          <p className="text-sm">Архів порожній</p>
+          <p className="text-4xl mb-3">📂</p><p className="text-sm">Архів порожній</p>
         </div>
       )}
     </div>
@@ -886,12 +1025,10 @@ export default function CreditsDepositsPage() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
-
     const [{ data: cr }, { data: dep }] = await Promise.all([
       supabase.from("credits").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("deposits").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
     ]);
-
     setCredits(cr ?? []);
     setDeposits(dep ?? []);
     setLoading(false);
@@ -923,7 +1060,7 @@ export default function CreditsDepositsPage() {
         <>
           {tab === "credits"  && <CreditsTab  credits={credits}   onReload={load} />}
           {tab === "deposits" && <DepositsTab deposits={deposits} onReload={load} />}
-          {tab === "archive"  && <ArchiveTab  credits={credits} deposits={deposits} />}
+          {tab === "archive"  && <ArchiveTab  credits={credits}   deposits={deposits} />}
         </>
       )}
     </div>
