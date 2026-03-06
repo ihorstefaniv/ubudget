@@ -228,13 +228,16 @@ export default function DashboardPage() {
         <p className="text-4xl font-bold text-neutral-900 dark:text-neutral-100 mb-4">{fmt(netWorth)}</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: "Готівка",     value: totalCash,    color: "text-green-500",  sign: "+" },
-            { label: "Рахунки",     value: totalBanking, color: "text-blue-500",   sign: "+" },
-            { label: "Депозити",    value: totalDeposit, color: "text-purple-500", sign: "+" },
-            { label: "Борги",       value: totalDebt,    color: "text-red-500",    sign: "−" },
-          ].map(({ label, value, color, sign }) => (
+            { label: "Готівка",  value: totalCash,    color: "text-green-500"  },
+            { label: "Рахунки",  value: totalBanking, color: "text-blue-500"   },
+            { label: "Депозити", value: totalDeposit, color: "text-purple-500" },
+            { label: "Борги",    value: -totalDebt,   color: "text-red-500"    },
+          ].map(({ label, value, color }) => (
             <div key={label}>
-              <p className={`text-sm font-semibold ${color}`}>{sign}{fmt(value)}</p>
+              {/* fmt() сам додає "−" для від'ємних чисел */}
+              <p className={`text-sm font-semibold ${color}`}>
+                {value >= 0 ? "+" : ""}{fmt(value)}
+              </p>
               <p className="text-xs text-neutral-400 mt-0.5">{label}</p>
             </div>
           ))}

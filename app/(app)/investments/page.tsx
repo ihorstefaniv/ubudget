@@ -634,13 +634,36 @@ function BusinessTab({ businesses, onReload }: { businesses: Business[]; onReloa
 }
 
 // ─── COLLECTIONS ──────────────────────────────────────────────
-const COL_CATS = ["Нумізматика", "Філателія", "Мистецтво", "Антикваріат", "Вініл", "Військова атрибутика", "Книги", "Метали", "Інше"];
-const COL_EMOJI: Record<string, string> = { "Нумізматика": "🪙", "Філателія": "📮", "Мистецтво": "🎨", "Антикваріат": "🏺", "Вініл": "💿", "Військова атрибутика": "🎖", "Книги": "📚", "Метали": "🥇", "Інше": "🎁" };
+const COL_CATS = ["numismatics", "philately", "art", "antiques", "vinyl", "military", "books", "metals", "other"];
+
+const COL_LABEL: Record<string, string> = {
+  numismatics: "Нумізматика",
+  philately:   "Філателія",
+  art:         "Мистецтво",
+  antiques:    "Антикваріат",
+  vinyl:       "Вініл",
+  military:    "Військова атрибутика",
+  books:       "Книги",
+  metals:      "Метали",
+  other:       "Інше",
+};
+
+const COL_EMOJI: Record<string, string> = {
+  numismatics: "🪙",
+  philately:   "📮",
+  art:         "🎨",
+  antiques:    "🏺",
+  vinyl:       "💿",
+  military:    "🎖",
+  books:       "📚",
+  metals:      "🥇",
+  other:       "🎁",
+};
 
 function CollectionModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: () => void; edit?: Collection }) {
   const supabase = createClient();
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ name: edit?.name ?? "", category: edit?.category ?? "Нумізматика", description: edit?.description ?? "", buy_price: edit ? String(edit.buy_price) : "", expected_price: edit ? String(edit.expected_price) : "", currency: edit?.currency ?? "UAH", buy_date: edit?.buy_date ?? "", status: edit?.status ?? "owned" });
+  const [f, setF] = useState({ name: edit?.name ?? "", category: edit?.category ?? "numismatics", description: edit?.description ?? "", buy_price: edit ? String(edit.buy_price) : "", expected_price: edit ? String(edit.expected_price) : "", currency: edit?.currency ?? "UAH", buy_date: edit?.buy_date ?? "", status: edit?.status ?? "owned" });
   const upd = (k: string, v: string) => setF(p => ({ ...p, [k]: v }));
   const profit = f.buy_price && f.expected_price ? +f.expected_price - +f.buy_price : 0;
 
@@ -660,7 +683,7 @@ function CollectionModal({ onClose, onSaved, edit }: { onClose: () => void; onSa
       <div className="grid grid-cols-3 gap-2">
         {COL_CATS.map(c => (
           <button key={c} onClick={() => upd("category", c)} className={`flex items-center gap-1.5 py-2 px-2 rounded-xl border text-xs font-medium transition-all ${f.category === c ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
-            <span>{COL_EMOJI[c]}</span>{c}
+            <span>{COL_EMOJI[c]}</span>{COL_LABEL[c]}
           </button>
         ))}
       </div>
@@ -722,7 +745,7 @@ function CollectionsTab({ collections, onReload }: { collections: Collection[]; 
       <div className="flex gap-2 flex-wrap">
         {categories.map(c => (
           <button key={c} onClick={() => setFilter(c)} className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${filter === c ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
-            {c === "all" ? "Всі" : `${COL_EMOJI[c] ?? ""} ${c}`}
+            {c === "all" ? "Всі" : `${COL_EMOJI[c] ?? ""} ${COL_LABEL[c] ?? c}`}
           </button>
         ))}
       </div>
@@ -746,7 +769,7 @@ function CollectionsTab({ collections, onReload }: { collections: Collection[]; 
                       <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">{c.name}</p>
                       {c.status === "sold" && <span className="text-xs px-1.5 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-400 shrink-0">Продано</span>}
                     </div>
-                    <p className="text-xs text-neutral-400">{c.category}{c.description ? ` · ${c.description.slice(0, 40)}` : ""}</p>
+                    <p className="text-xs text-neutral-400">{COL_LABEL[c.category] ?? c.category}{c.description ? ` · ${c.description.slice(0, 40)}` : ""}</p>
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{fmt(Number(c.expected_price), c.currency)}</p>
