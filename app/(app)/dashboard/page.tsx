@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { Icon, icons, Card, StatCard, ProgressBar } from "@/components/ui";
 
 type Period = "month" | "quarter" | "year";
 
@@ -27,14 +28,6 @@ function startOf(period: Period): string {
   if (period === "quarter") return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1).toISOString().slice(0, 10);
   return new Date(d.getFullYear(), 0, 1).toISOString().slice(0, 10);
 }
-function prevMonthStart(): string {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString().slice(0, 10);
-}
-function prevMonthEnd(): string {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 0).toISOString().slice(0, 10);
-}
 
 const CAT_ICONS: Record<string, string> = {
   food: "🛒", cafe: "☕", transport: "🚗", fuel: "⛽", health: "💊",
@@ -55,18 +48,12 @@ const ACC_ICONS: Record<string, string> = {
   installment: "🛍", mortgage: "🏠", property: "🏘", crypto: "₿", collections: "🎯",
 };
 
-// ─── Icons ────────────────────────────────────────────────────
-const Icon = ({ d, className = "w-5 h-5" }: { d: string; className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d={d} />
-  </svg>
-);
-const ic = {
-  loader:  "M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83",
-  clock:   "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
-  chart:   "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
-  bag:     "M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z",
-  trend:   "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
+// ─── Extra icons (не в бібліотеці) ───────────────────────────
+const extraIcons = {
+  clock: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+  chart: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
+  bag:   "M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z",
+  trend: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
 };
 
 // ─── Health Score Ring ────────────────────────────────────────
@@ -86,16 +73,6 @@ function HealthRing({ score }: { score: number }) {
         <p className="text-sm font-semibold" style={{ color }}>{label}</p>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">Health Score</p>
       </div>
-    </div>
-  );
-}
-
-function ProgressBar({ value, max }: { value: number; max: number }) {
-  const pct = Math.min((value / (max || 1)) * 100, 100);
-  return (
-    <div className="w-full bg-neutral-100 dark:bg-neutral-800 rounded-full h-2">
-      <div className="h-2 rounded-full transition-all duration-700"
-        style={{ width: `${pct}%`, backgroundColor: value > max ? "#ef4444" : "#fb923c" }} />
     </div>
   );
 }
@@ -156,29 +133,24 @@ export default function DashboardPage() {
   const totalDebt    = credits.reduce((s, c) => s + Number(c.remaining_amount), 0);
   const totalDeposit = deposits.filter(d => d.currency === "UAH").reduce((s, d) => s + Number(d.amount), 0);
 
-  // Period transactions
   const periodStart = startOf(period);
   const periodTxs   = txs.filter(t => t.transaction_date >= periodStart);
   const income      = periodTxs.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
   const expenses    = periodTxs.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
 
-  // This month budget fact
-  const monthStart  = startOf("month");
-  const monthTxs    = txs.filter(t => t.transaction_date >= monthStart && t.type === "expense");
-  const budgetFact  = monthTxs.reduce((s, t) => s + Number(t.amount), 0);
+  const monthStart = startOf("month");
+  const monthTxs   = txs.filter(t => t.transaction_date >= monthStart && t.type === "expense");
+  const budgetFact = monthTxs.reduce((s, t) => s + Number(t.amount), 0);
 
-  // Top expense category this month
   const catTotals: Record<string, number> = {};
   monthTxs.forEach(t => { const k = t.category_key ?? "other"; catTotals[k] = (catTotals[k] ?? 0) + Number(t.amount); });
   const topCatEntry = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
   const topCat = topCatEntry ? { key: topCatEntry[0], amount: topCatEntry[1], pct: budgetFact > 0 ? Math.round(topCatEntry[1] / budgetFact * 100) : 0 } : null;
 
-  // Days without income
   const lastIncomeTx   = txs.find(t => t.type === "income");
   const daysNoIncome   = lastIncomeTx ? Math.floor((Date.now() - new Date(lastIncomeTx.transaction_date).getTime()) / 86400000) : null;
   const lastIncomeDate = lastIncomeTx ? new Date(lastIncomeTx.transaction_date).toLocaleDateString("uk-UA", { day: "numeric", month: "long" }) : null;
 
-  // Health score
   const healthScore = (() => {
     let s = 60;
     if (income > 0 && expenses < income) s += 15;
@@ -191,7 +163,6 @@ export default function DashboardPage() {
     return Math.max(10, Math.min(100, s));
   })();
 
-  // Upcoming credit payments (next 7 days)
   const today = new Date().getDate();
   const upcoming = credits.filter(c => {
     if (!c.payment_day) return false;
@@ -199,14 +170,12 @@ export default function DashboardPage() {
     return diff >= 0 && diff <= 7;
   });
 
-  // Recent 5 transactions
   const recentTxs = txs.slice(0, 5);
-
   const periodLabel: Record<Period, string> = { month: "місяць", quarter: "квартал", year: "рік" };
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-96">
-      <Icon d={ic.loader} className="w-8 h-8 text-orange-400 animate-spin" />
+      <Icon d={icons.loader} className="w-8 h-8 text-orange-400 animate-spin" />
     </div>
   );
 
@@ -223,7 +192,7 @@ export default function DashboardPage() {
       </div>
 
       {/* 2. NET WORTH */}
-      <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-6">
+      <Card className="p-6">
         <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Загальний баланс (UAH)</p>
         <p className="text-4xl font-bold text-neutral-900 dark:text-neutral-100 mb-4">{fmt(netWorth)}</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -234,7 +203,6 @@ export default function DashboardPage() {
             { label: "Борги",    value: -totalDebt,   color: "text-red-500"    },
           ].map(({ label, value, color }) => (
             <div key={label}>
-              {/* fmt() сам додає "−" для від'ємних чисел */}
               <p className={`text-sm font-semibold ${color}`}>
                 {value >= 0 ? "+" : ""}{fmt(value)}
               </p>
@@ -242,20 +210,20 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* 3. STAT CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
         {/* Днів без доходу */}
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-5">
+        <Card className="p-5">
           <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${
             daysNoIncome === null ? "bg-neutral-100 dark:bg-neutral-800 text-neutral-400"
             : daysNoIncome > 60 ? "bg-red-50 dark:bg-red-950/30 text-red-500"
             : daysNoIncome > 30 ? "bg-amber-50 dark:bg-amber-950/30 text-amber-500"
             : "bg-green-50 dark:bg-green-950/30 text-green-500"
           }`}>
-            <Icon d={ic.clock} className="w-4 h-4" />
+            <Icon d={extraIcons.clock} className="w-4 h-4" />
           </div>
           <p className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">
             {daysNoIncome !== null ? `${daysNoIncome} днів` : "—"}
@@ -264,12 +232,12 @@ export default function DashboardPage() {
           <p className="text-xs text-neutral-400 mt-1">
             {lastIncomeDate ? `Останній: ${lastIncomeDate}` : "Доходів не знайдено"}
           </p>
-        </div>
+        </Card>
 
         {/* Бюджет план/факт */}
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-5">
+        <Card className="p-5">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-orange-50 dark:bg-orange-950/30 text-orange-500">
-            <Icon d={ic.chart} className="w-4 h-4" />
+            <Icon d={extraIcons.chart} className="w-4 h-4" />
           </div>
           {budgetPlan > 0 ? (
             <>
@@ -296,12 +264,12 @@ export default function DashboardPage() {
               </Link>
             </>
           )}
-        </div>
+        </Card>
 
         {/* Топ категорія */}
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-5">
+        <Card className="p-5">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-orange-50 dark:bg-orange-950/30 text-orange-500">
-            <Icon d={ic.bag} className="w-4 h-4" />
+            <Icon d={extraIcons.bag} className="w-4 h-4" />
           </div>
           {topCat ? (
             <>
@@ -317,7 +285,7 @@ export default function DashboardPage() {
               <p className="text-xs text-neutral-400 mt-0.5">Немає витрат цього місяця</p>
             </>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Upcoming credit payments alert */}
@@ -339,7 +307,7 @@ export default function DashboardPage() {
       )}
 
       {/* 4. ДОХОДИ & ВИТРАТИ */}
-      <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-6">
+      <Card className="p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Доходи & Витрати</h2>
           <div className="flex rounded-xl border border-neutral-100 dark:border-neutral-800 overflow-hidden text-xs">
@@ -369,12 +337,11 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Bar chart */}
         {income > 0 && (
           <div className="flex gap-3 items-end h-16">
             {[
-              { label: "Дох", val: income, max: Math.max(income, expenses), color: "bg-green-400" },
-              { label: "Вит", val: expenses, max: Math.max(income, expenses), color: "bg-red-400" },
+              { label: "Дох", val: income,   max: Math.max(income, expenses), color: "bg-green-400" },
+              { label: "Вит", val: expenses, max: Math.max(income, expenses), color: "bg-red-400"   },
             ].map(({ label, val, max, color }) => (
               <div key={label} className="flex flex-col items-center gap-1 flex-1">
                 <div className="w-full flex items-end justify-center" style={{ height: 48 }}>
@@ -387,13 +354,13 @@ export default function DashboardPage() {
             <p className="text-xs text-neutral-400 self-center flex-1 text-center">за {periodLabel[period]}</p>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* 5. РАХУНКИ & ТРАНЗАКЦІЇ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Стан рахунків */}
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-5">
+        <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Стан рахунків</h2>
             <Link href="/accounts" className="text-xs text-orange-400 hover:text-orange-500 font-medium transition-colors">Всі →</Link>
@@ -424,10 +391,10 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Останні транзакції */}
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-5">
+        <Card className="p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Останні транзакції</h2>
             <Link href="/transactions" className="text-xs text-orange-400 hover:text-orange-500 font-medium transition-colors">Всі →</Link>
@@ -471,7 +438,7 @@ export default function DashboardPage() {
               })}
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* 6. QUICK TOOLS */}
@@ -479,10 +446,10 @@ export default function DashboardPage() {
         <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">Інструменти</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { href: "/credits",           label: "Кредити",     emoji: "💳", desc: `${credits.length} активних` },
-            { href: "/credits?tab=deposits", label: "Депозити",    emoji: "🏦", desc: deposits.length > 0 ? fmt(totalDeposit) : "Немає" },
-            { href: "/investments",  label: "Інвестиції",  emoji: "📈", desc: "Портфель" },
-            { href: "/envelopes",    label: "Конверти",    emoji: "✉️", desc: "Метод конвертів" },
+            { href: "/credits",              label: "Кредити",    emoji: "💳", desc: `${credits.length} активних` },
+            { href: "/credits?tab=deposits", label: "Депозити",   emoji: "🏦", desc: deposits.length > 0 ? fmt(totalDeposit) : "Немає" },
+            { href: "/investments",          label: "Інвестиції", emoji: "📈", desc: "Портфель" },
+            { href: "/envelopes",            label: "Конверти",   emoji: "✉️", desc: "Метод конвертів" },
           ].map(({ href, label, emoji, desc }) => (
             <Link key={href} href={href}
               className="p-4 rounded-2xl border border-neutral-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-orange-200 dark:hover:border-orange-900 hover:shadow-md transition-all group">
