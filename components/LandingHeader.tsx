@@ -152,7 +152,16 @@ export default function LandingHeader() {
       if (!session?.user) { setUser(null); return; }
       const u = session.user;
       const name = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split("@")[0] || "Користувач";
-      setUser({ name, balance: 42350 });
+      const { data: accounts } = await supabase
+        .from("accounts")
+        .select("balance, currency")
+        .eq("user_id", u.id)
+        .eq("is_active", true)
+        .eq("is_archived", false);
+      const balance = (accounts ?? [])
+        .filter((a: { currency: string; balance: number }) => a.currency === "UAH")
+        .reduce((sum: number, a: { currency: string; balance: number }) => sum + (Number(a.balance) || 0), 0);
+      setUser({ name, balance });
     }
 
     load();
@@ -161,7 +170,18 @@ export default function LandingHeader() {
       if (!session?.user) { setUser(null); return; }
       const u = session.user;
       const name = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split("@")[0] || "Користувач";
-      setUser({ name, balance: 42350 });
+      supabase
+        .from("accounts")
+        .select("balance, currency")
+        .eq("user_id", u.id)
+        .eq("is_active", true)
+        .eq("is_archived", false)
+        .then(({ data: accounts }: { data: { currency: string; balance: number }[] | null }) => {
+          const balance = (accounts ?? [])
+            .filter((a: { currency: string; balance: number }) => a.currency === "UAH")
+            .reduce((sum: number, a: { currency: string; balance: number }) => sum + (Number(a.balance) || 0), 0);
+          setUser({ name, balance });
+        });
     });
 
     return () => subscription.unsubscribe();
