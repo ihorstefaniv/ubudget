@@ -1,15 +1,21 @@
-// ФАЙЛ: app/(admin)/blog/_components/BlogEditor.tsx
+// ФАЙЛ: app/(app)/admin/blog/_components/BlogEditor.tsx
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/auth";
 
+const BLOG_CATEGORIES = ["Бюджет","Інвестиції","Кредити","Заощадження","Поради","Інше"];
+
 interface PostForm {
   title: string; slug: string; excerpt: string; content: string;
   status: "draft" | "published"; meta_title: string; meta_desc: string;
+  category: string; cover_url: string;
 }
-const EMPTY: PostForm = { title: "", slug: "", excerpt: "", content: "", status: "draft", meta_title: "", meta_desc: "" };
+const EMPTY: PostForm = {
+  title: "", slug: "", excerpt: "", content: "", status: "draft",
+  meta_title: "", meta_desc: "", category: "", cover_url: "",
+};
 
 // ─── Icons ────────────────────────────────────────────────────
 const Icon = ({ d, cls = "w-4 h-4" }: { d: string; cls?: string }) => (
@@ -18,18 +24,17 @@ const Icon = ({ d, cls = "w-4 h-4" }: { d: string; cls?: string }) => (
   </svg>
 );
 const ic = {
-  back:    "M10 19l-7-7m0 0l7-7m-7 7h18",
-  eye:     "M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z",
-  bold:    "M6 4h8a4 4 0 014 4 4 4 0 01-4 4H6z M6 12h9a4 4 0 014 4 4 4 0 01-4 4H6z",
-  italic:  "M19 4h-9M14 20H5M15 4L9 20",
-  link:    "M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1",
-  image:   "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
-  quote:   "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
-  code:    "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4",
-  list:    "M4 6h16M4 10h16M4 14h16M4 18h16",
-  olist:   "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
-  hr:      "M5 12h14",
-  undo:    "M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6",
+  back:   "M10 19l-7-7m0 0l7-7m-7 7h18",
+  eye:    "M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z",
+  bold:   "M6 4h8a4 4 0 014 4 4 4 0 01-4 4H6z M6 12h9a4 4 0 014 4 4 4 0 01-4 4H6z",
+  italic: "M19 4h-9M14 20H5M15 4L9 20",
+  link:   "M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1",
+  image:  "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
+  quote:  "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
+  code:   "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4",
+  list:   "M4 6h16M4 10h16M4 14h16M4 18h16",
+  olist:  "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
+  hr:     "M5 12h14",
 };
 
 function slugify(str: string) {
@@ -42,7 +47,6 @@ function slugify(str: string) {
     .replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-+/g, "-");
 }
 
-// ─── Toolbar button ───────────────────────────────────────────
 function ToolBtn({ icon, label, onClick, active }: { icon?: string; label?: string; onClick: () => void; active?: boolean }) {
   return (
     <button type="button" onMouseDown={e => { e.preventDefault(); onClick(); }} title={label}
@@ -53,7 +57,6 @@ function ToolBtn({ icon, label, onClick, active }: { icon?: string; label?: stri
   );
 }
 
-// ─── Markdown preview ─────────────────────────────────────────
 function renderMd(md: string): string {
   return md
     .replace(/^# (.+)$/gm,   '<h1 class="text-2xl font-bold mt-6 mb-2">$1</h1>')
@@ -76,29 +79,35 @@ function renderMd(md: string): string {
     }).join("\n");
 }
 
-const inp   = "w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-orange-400 transition-colors bg-white";
-const lbl   = "text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1.5 block";
+const inp = "w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-orange-400 transition-colors bg-white";
+const lbl = "text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1.5 block";
 
 export default function BlogEditor({ postId }: { postId?: string }) {
   const router    = useRouter();
   const isEdit    = !!postId;
   const taRef     = useRef<HTMLTextAreaElement>(null);
 
-  const [form, setForm]         = useState<PostForm>(EMPTY);
-  const [loading, setLoading]   = useState(isEdit);
-  const [saving, setSaving]     = useState(false);
-  const [preview, setPreview]   = useState(false);
-  const [autoSlug, setAutoSlug] = useState(!isEdit);
-  const [savedMsg, setSavedMsg] = useState("");
+  const [form, setForm]           = useState<PostForm>(EMPTY);
+  const [loading, setLoading]     = useState(isEdit);
+  const [saving, setSaving]       = useState(false);
+  const [preview, setPreview]     = useState(false);
+  const [autoSlug, setAutoSlug]   = useState(!isEdit);
+  const [savedMsg, setSavedMsg]   = useState("");
   const [wordCount, setWordCount] = useState(0);
 
   useEffect(() => {
     if (!isEdit) return;
     createClient().from("posts").select("*").eq("id", postId).single().then(({ data }) => {
       if (data) setForm({
-        title: data.title ?? "", slug: data.slug ?? "", excerpt: data.excerpt ?? "",
-        content: data.content ?? "", status: data.status ?? "draft",
-        meta_title: data.meta_title ?? "", meta_desc: data.meta_desc ?? "",
+        title:      data.title      ?? "",
+        slug:       data.slug       ?? "",
+        excerpt:    data.excerpt    ?? "",
+        content:    data.content    ?? "",
+        status:     data.status     ?? "draft",
+        meta_title: data.meta_title ?? "",
+        meta_desc:  data.meta_desc  ?? "",
+        category:   data.category   ?? "",
+        cover_url:  data.cover_url  ?? "",
       });
       setLoading(false);
     });
@@ -117,7 +126,6 @@ export default function BlogEditor({ postId }: { postId?: string }) {
     });
   }
 
-  // Вставляємо markdown враховуючи позицію курсора
   const insertMd = useCallback((before: string, after = "", placeholder = "") => {
     const ta = taRef.current;
     if (!ta) return;
@@ -134,20 +142,14 @@ export default function BlogEditor({ postId }: { postId?: string }) {
     }, 0);
   }, []);
 
-  // Обробка Tab та Enter в редакторі
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     const ta = e.currentTarget;
-    if (e.key === "Tab") {
-      e.preventDefault();
-      insertMd("  ");
-    }
-    // Ctrl+B / Ctrl+I shortcuts
+    if (e.key === "Tab") { e.preventDefault(); insertMd("  "); }
     if (e.ctrlKey || e.metaKey) {
       if (e.key === "b") { e.preventDefault(); insertMd("**", "**", "жирний текст"); }
       if (e.key === "i") { e.preventDefault(); insertMd("*", "*", "курсив"); }
       if (e.key === "s") { e.preventDefault(); save(); }
     }
-    // Auto-continue lists
     if (e.key === "Enter") {
       const { selectionStart, value } = ta;
       const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
@@ -166,8 +168,15 @@ export default function BlogEditor({ postId }: { postId?: string }) {
     if (!form.title.trim()) return;
     setSaving(true);
     const supabase = createClient();
-    const payload  = {
-      ...form,
+    const payload = {
+      title:        form.title,
+      slug:         form.slug,
+      excerpt:      form.excerpt,
+      content:      form.content,
+      meta_title:   form.meta_title,
+      meta_desc:    form.meta_desc,
+      category:     form.category || null,
+      cover_url:    form.cover_url || null,
       status:       publish ? "published" : form.status,
       published_at: publish ? new Date().toISOString() : (form.status === "published" ? undefined : null),
       updated_at:   new Date().toISOString(),
@@ -188,7 +197,7 @@ export default function BlogEditor({ postId }: { postId?: string }) {
 
   return (
     <div className="space-y-4 max-w-6xl">
-      {/* ── Topbar ── */}
+      {/* Topbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <button onClick={() => router.push("/admin/blog")} className="p-2 rounded-xl hover:bg-neutral-200 text-neutral-500 transition-colors">
@@ -226,9 +235,8 @@ export default function BlogEditor({ postId }: { postId?: string }) {
       </div>
 
       <div className="grid lg:grid-cols-[1fr_280px] gap-4">
-        {/* ── Editor column ── */}
+        {/* Editor column */}
         <div className="space-y-3">
-          {/* Title + slug + excerpt */}
           <div className="bg-white rounded-2xl border border-neutral-200 p-5 space-y-4">
             <div>
               <label className={lbl}>Заголовок *</label>
@@ -253,44 +261,33 @@ export default function BlogEditor({ postId }: { postId?: string }) {
 
           {/* Main editor */}
           <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
-            {/* Toolbar */}
             {!preview && (
               <div className="flex items-center gap-0.5 px-3 py-2 border-b border-neutral-100 flex-wrap bg-neutral-50/50">
-                {/* Headings */}
                 <ToolBtn label="H1" onClick={() => insertMd("# ", "", "Заголовок 1")} />
                 <ToolBtn label="H2" onClick={() => insertMd("## ", "", "Заголовок 2")} />
                 <ToolBtn label="H3" onClick={() => insertMd("### ", "", "Заголовок 3")} />
                 <div className="w-px h-4 bg-neutral-200 mx-1" />
-                {/* Formatting */}
-                <ToolBtn icon={ic.bold}   label="Жирний" onClick={() => insertMd("**", "**", "жирний текст")} />
-                <ToolBtn icon={ic.italic} label="Курсив" onClick={() => insertMd("*", "*", "курсив")} />
-                <ToolBtn icon={ic.code}   label="Код"    onClick={() => insertMd("`", "`", "код")} />
+                <ToolBtn icon={ic.bold}   label="Жирний"       onClick={() => insertMd("**", "**", "жирний текст")} />
+                <ToolBtn icon={ic.italic} label="Курсив"       onClick={() => insertMd("*", "*", "курсив")} />
+                <ToolBtn icon={ic.code}   label="Код"          onClick={() => insertMd("`", "`", "код")} />
                 <div className="w-px h-4 bg-neutral-200 mx-1" />
-                {/* Lists */}
-                <ToolBtn icon={ic.list}  label="Список"     onClick={() => insertMd("- ", "", "пункт")} />
-                <ToolBtn icon={ic.olist} label="Нумерований" onClick={() => insertMd("1. ", "", "пункт")} />
-                <ToolBtn icon={ic.quote} label="Цитата"     onClick={() => insertMd("> ", "", "цитата")} />
+                <ToolBtn icon={ic.list}   label="Список"       onClick={() => insertMd("- ", "", "пункт")} />
+                <ToolBtn icon={ic.olist}  label="Нумерований"  onClick={() => insertMd("1. ", "", "пункт")} />
+                <ToolBtn icon={ic.quote}  label="Цитата"       onClick={() => insertMd("> ", "", "цитата")} />
                 <div className="w-px h-4 bg-neutral-200 mx-1" />
-                {/* Blocks */}
-                <ToolBtn icon={ic.link}  label="Посилання" onClick={() => insertMd("[", "](url)", "текст")} />
-                <ToolBtn icon={ic.image} label="Зображення" onClick={() => insertMd("![", "](url)", "alt текст")} />
-                <ToolBtn label="```" onClick={() => insertMd("```\n", "\n```", "код")} />
-                <ToolBtn icon={ic.hr}   label="Розділювач" onClick={() => insertMd("\n---\n")} />
+                <ToolBtn icon={ic.link}   label="Посилання"    onClick={() => insertMd("[", "](url)", "текст")} />
+                <ToolBtn icon={ic.image}  label="Зображення"   onClick={() => insertMd("![", "](url)", "alt текст")} />
+                <ToolBtn label="```"                           onClick={() => insertMd("```\n", "\n```", "код")} />
+                <ToolBtn icon={ic.hr}     label="Розділювач"   onClick={() => insertMd("\n---\n")} />
                 <div className="flex-1" />
-                <span className="text-[10px] text-neutral-400 pr-1">
-                  Ctrl+B · Ctrl+I · Ctrl+S
-                </span>
+                <span className="text-[10px] text-neutral-400 pr-1">Ctrl+B · Ctrl+I · Ctrl+S</span>
               </div>
             )}
-
-            {/* Content area */}
             {preview ? (
               <div className="p-6 min-h-96 prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ __html: renderMd(form.content) || '<p class="text-neutral-400">Немає контенту для перегляду</p>' }} />
             ) : (
-              <textarea
-                ref={taRef}
-                value={form.content}
+              <textarea ref={taRef} value={form.content}
                 onChange={e => set("content", e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={"Починайте писати...\n\n## Використовуйте Markdown\n\n**Жирний** або *курсив*, `код`, > цитата\n\n- список\n- пунктів"}
@@ -298,8 +295,6 @@ export default function BlogEditor({ postId }: { postId?: string }) {
                 style={{ tabSize: 2 }}
               />
             )}
-
-            {/* Status bar */}
             <div className="flex items-center justify-between px-4 py-2 border-t border-neutral-100 bg-neutral-50/50 text-[10px] text-neutral-400">
               <span>{wordCount} слів · ~{readingTime} хв читання · {form.content.length} символів</span>
               <span>Markdown · Tab = відступ</span>
@@ -307,9 +302,9 @@ export default function BlogEditor({ postId }: { postId?: string }) {
           </div>
         </div>
 
-        {/* ── Sidebar ── */}
+        {/* Sidebar */}
         <div className="space-y-3">
-          {/* Publish */}
+          {/* Status */}
           <div className="bg-white rounded-2xl border border-neutral-200 p-4 space-y-3">
             <p className={lbl}>Статус публікації</p>
             <div className="flex gap-2">
@@ -326,14 +321,30 @@ export default function BlogEditor({ postId }: { postId?: string }) {
             </div>
           </div>
 
-          {/* Cover image */}
+          {/* Category */}
+          <div className="bg-white rounded-2xl border border-neutral-200 p-4 space-y-2">
+            <p className={lbl}>Категорія</p>
+            <select value={form.category} onChange={e => set("category", e.target.value)}
+              className={inp}>
+              <option value="">— Без категорії —</option>
+              {BLOG_CATEGORIES.map((cat: string) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Cover */}
           <div className="bg-white rounded-2xl border border-neutral-200 p-4 space-y-2">
             <p className={lbl}>Обкладинка</p>
             <input
+              value={form.cover_url}
               placeholder="https://... (URL зображення)"
               className={inp + " text-xs"}
-              onChange={e => setForm(f => ({ ...f, cover_url: e.target.value } as PostForm & { cover_url: string }))}
+              onChange={e => set("cover_url", e.target.value)}
             />
+            {form.cover_url && (
+              <img src={form.cover_url} alt="preview" className="w-full rounded-xl object-cover aspect-video mt-2" />
+            )}
             <p className="text-[10px] text-neutral-400">Рекомендовано: 1200×630px</p>
           </div>
 
@@ -379,14 +390,14 @@ export default function BlogEditor({ postId }: { postId?: string }) {
             <p className={lbl}>Markdown шпаргалка</p>
             <div className="space-y-1 text-xs text-neutral-500 font-mono">
               {[
-                ["# H1  ## H2  ### H3"],
-                ["**жирний**  *курсив*"],
-                ["`код`  ```блок```"],
-                ["- список  1. нумер"],
-                ["> цитата  --- лінія"],
-                ["[текст](url)"],
-                ["![alt](url зображення)"],
-              ].map(([ex]) => (
+                "# H1  ## H2  ### H3",
+                "**жирний**  *курсив*",
+                "`код`  ```блок```",
+                "- список  1. нумер",
+                "> цитата  --- лінія",
+                "[текст](url)",
+                "![alt](url зображення)",
+              ].map(ex => (
                 <div key={ex} className="px-2 py-1 bg-white rounded-lg border border-neutral-100">{ex}</div>
               ))}
             </div>
