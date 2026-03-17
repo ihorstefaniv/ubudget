@@ -619,55 +619,7 @@ export default function ShockTrackerPage() {
         </div>
       )}
 
-      {/* ── SQL для таблиці ── */}
-      {shocks.length === 0 && (
-        <Card>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">🗄️</span>
-            <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">SQL для таблиці shocks</p>
-          </div>
-          <pre className="text-xs font-mono bg-neutral-950 text-green-400 rounded-xl p-4 overflow-x-auto leading-relaxed">
-{`CREATE TABLE shocks (
-  id            uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id       uuid REFERENCES auth.users(id) NOT NULL,
-  title         text NOT NULL,
-  description   text,
-  category      text DEFAULT 'other',
-  severity      text DEFAULT 'moderate',
-  status        text DEFAULT 'active',
-  amount        numeric DEFAULT 0,
-  amount_paid   numeric DEFAULT 0,
-  currency      text DEFAULT 'UAH',
-  date          date DEFAULT CURRENT_DATE,
-  resolved_date date,
-  created_at    timestamptz DEFAULT now()
-);
 
--- RLS
-ALTER TABLE shocks ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users see own shocks"
-  ON shocks FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users insert own shocks"
-  ON shocks FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users update own shocks"
-  ON shocks FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users delete own shocks"
-  ON shocks FOR DELETE
-  USING (auth.uid() = user_id);
-
--- Індекс
-CREATE INDEX shocks_user_date
-  ON shocks(user_id, date DESC);`}
-          </pre>
-        </Card>
-      )}
 
       {/* ── Modal ── */}
       {modal && (
