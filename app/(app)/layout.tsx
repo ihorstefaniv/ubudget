@@ -72,14 +72,15 @@ const mainNav = [
 
 /** Підменю Інструменти */
 const toolsNav = [
-  { href: "/tools/deposit-calc", label: "Калькулятор депозитів" },
-  { href: "/tools/credit-calc",  label: "Калькулятор кредитів" },
-  { href: "/tools/fuel-calc",    label: "Витрати пального" },
-  { href: "/tools/scenarios",    label: "Сценарії" },
-  { href: "/tools/history",      label: "Фінансова історія" },
-  { href: "/tools/health",       label: "Health Score деталі" },
-  { href: "/tools/shock",        label: "Shock Tracker" },
-  { href: "/tools/crisis",       label: "🚨 Режим КРИЗА" },
+  { href: "/tools/fuel-prices",  label: "⛽ Ціни на пальне", badge: "new" },
+  { href: "/tools/deposit-calc", label: "💰 Калькулятор депозитів" },
+  { href: "/tools/credit-calc",  label: "📊 Калькулятор кредитів" },
+  { href: "/tools/fuel-calc",    label: "🗺 Витрати пального" },
+  { href: "/tools/scenarios",    label: "🔮 Сценарії" },
+  { href: "/tools/history",      label: "📜 Фінансова історія" },
+  { href: "/tools/health",       label: "❤️ Health Score деталі" },
+  { href: "/tools/shock",        label: "🚨 Shock Tracker" },
+  { href: "/tools/crisis",       label: "🛑 Режим КРИЗА" },
 ];
 
 // ─── Sidebar Content ──────────────────────────────────────────

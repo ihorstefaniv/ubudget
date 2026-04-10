@@ -46,8 +46,8 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
               <p className="text-xs font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider mb-3">Продукт</p>
               <ul className="space-y-2 text-sm">
                 {[
-                  { label: "Функціонал", href: "#features" },
-                  { label: "Демо",       href: "/accounts" },
+                  { label: "Функціонал", href: "/#features" },
+                  { label: "Інструменти", href: "/free/tools" },
                   { label: "Реєстрація", href: "/register" },
                   { label: "Увійти",     href: "/login" },
                 ].map(({ label, href }) => (
@@ -63,9 +63,11 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
               <ul className="space-y-2 text-sm">
                 {[
                   { label: "FAQ",                    href: "/faq" },
-                  { label: "Зворотній зв'язок",      href: "#" },
-                  { label: "Конфіденційність",        href: "#" },
-                  { label: "Умови використання",      href: "#" },
+                  { label: "Про нас",                href: "/about" },
+                  { label: "Блог",                   href: "/blog" },
+                  { label: "Зворотній зв'язок",      href: "mailto:hello@ubudget.app" },
+                  { label: "Конфіденційність",       href: "/privacy" },
+                  { label: "Умови використання",     href: "/terms" },
                 ].map(({ label, href }) => (
                   <li key={label}>
                     <Link href={href} className="text-neutral-600 dark:text-neutral-400 hover:text-orange-400 transition-colors duration-150">{label}</Link>
@@ -76,8 +78,21 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 border-t border-neutral-100 dark:border-neutral-800">
-            <p className="text-xs text-neutral-400 dark:text-neutral-500">© 2026 UBudget. Зроблено з ♥ в Україні.</p>
-            <p className="text-xs text-neutral-400 dark:text-neutral-500">Версія 1.2 Beta</p>
+            <p className="text-xs text-neutral-400 dark:text-neutral-500">
+              © 2026 UBudget. Зроблено з ♥ в Україні.
+            </p>
+            <div className="flex items-center gap-3">
+              <a 
+                href="https://osis.studio/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-xs text-neutral-400 dark:text-neutral-500 hover:text-orange-400 transition-colors"
+              >
+                Розробка: OSIS Studio
+              </a>
+              <span className="text-neutral-300 dark:text-neutral-700">•</span>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500">Версія 1.2 Beta</p>
+            </div>
           </div>
         </div>
       </footer>

@@ -1,7 +1,22 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/", "/login", "/register"];
+const PUBLIC_PREFIXES = [
+  "/",
+  "/login",
+  "/register",
+  "/blog",
+  "/free",
+  "/tools",
+  "/api/geocode",
+  "/api/route",
+];
+
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PREFIXES.some((prefix) =>
+    pathname === prefix || pathname.startsWith(prefix + "/")
+  );
+}
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -32,10 +47,9 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const isPublic = PUBLIC_ROUTES.includes(pathname);
 
-  // Незалогінений → редірект на /login
-  if (!user && !isPublic) {
+  // Незалогінений → редірект на /login (крім публічних шляхів)
+  if (!user && !isPublicPath(pathname)) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
@@ -48,5 +62,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };
