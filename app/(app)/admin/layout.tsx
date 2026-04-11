@@ -122,6 +122,9 @@ function Sidebar({ pathname, userName, role, onClose, ticketsCount }: {
             <Icon d={ic.logout} cls="w-4 h-4" />
           </button>
         </div>
+        <p className="text-[10px] text-white/20 font-mono px-3 pt-1">
+          build: {process.env.NEXT_PUBLIC_BUILD_SHA}
+        </p>
       </div>
     </div>
   );

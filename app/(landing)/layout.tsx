@@ -91,7 +91,9 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
                 Розробка: OSIS Studio
               </a>
               <span className="text-neutral-300 dark:text-neutral-700">•</span>
-              <p className="text-xs text-neutral-400 dark:text-neutral-500">Версія 1.2 Beta</p>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500">
+                v1.2 · <span className="font-mono">{process.env.NEXT_PUBLIC_BUILD_SHA}</span>
+              </p>
             </div>
           </div>
         </div>
