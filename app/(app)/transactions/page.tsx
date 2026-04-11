@@ -439,7 +439,7 @@ export default function TransactionsPage() {
     setTxs(prev => prev.filter(t => t.id !== id));
   }
 
-  // Фільтрація
+  // Фільтрація для списку (враховує тип)
   const filtered = txs.filter(tx => {
     if (filterType !== "all" && tx.type !== filterType) return false;
     if (filterAccount !== "all" && tx.account !== filterAccount) return false;
@@ -453,9 +453,23 @@ export default function TransactionsPage() {
     return true;
   });
 
+  // Для summary-блоків: тільки account + search, БЕЗ фільтра по типу
+  // щоб Доходи/Витрати/Різниця завжди показували загальну картину
+  const summaryBase = txs.filter(tx => {
+    if (filterAccount !== "all" && tx.account !== filterAccount) return false;
+    if (search) {
+      const q   = search.toLowerCase();
+      const cat = getCat(tx.type, tx.category);
+      if (!tx.note.toLowerCase().includes(q) &&
+          !cat.label.toLowerCase().includes(q) &&
+          !tx.account.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
   const grouped      = groupByDate(filtered);
-  const totalIncome  = filtered.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExpense = filtered.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const totalIncome  = summaryBase.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalExpense = summaryBase.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const balance      = totalIncome - totalExpense;
 
   return (
