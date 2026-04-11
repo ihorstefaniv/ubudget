@@ -20,6 +20,13 @@ const MODULES = [
   { id: "crypto", label: "Крипто & Метали", desc: "Bitcoin, золото, срібло" },
 ];
 
+function validatePassword(pwd: string): string | null {
+  if (pwd.length < 8) return "Пароль — мінімум 8 символів";
+  if (!/[A-Z]/.test(pwd)) return "Пароль повинен містити хоча б одну велику літеру";
+  if (!/[0-9]/.test(pwd)) return "Пароль повинен містити хоча б одну цифру";
+  return null;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
@@ -139,17 +146,19 @@ export default function RegisterPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Мінімум 8 символів"
+                placeholder="Мін. 8 символів, велика літера, цифра"
                 className="w-full px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 text-sm focus:outline-none focus:border-orange-300 dark:focus:border-orange-700 focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-950 transition-all"
               />
             </div>
 
             <button
               onClick={() => {
-                if (!fullName || !email || password.length < 8) {
-                  setError("Заповни всі поля. Пароль — мінімум 8 символів.");
+                if (!fullName || !email) {
+                  setError("Заповни всі поля.");
                   return;
                 }
+                const pwdError = validatePassword(password);
+                if (pwdError) { setError(pwdError); return; }
                 setError("");
                 setStep(2);
               }}

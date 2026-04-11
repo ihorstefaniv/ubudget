@@ -57,8 +57,23 @@ function ToolBtn({ icon, label, onClick, active }: { icon?: string; label?: stri
   );
 }
 
+// Escape raw HTML entities before markdown transformation to prevent XSS
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Allow only http/https/relative links — blocks javascript: and data: URIs
+function safeHref(href: string): string {
+  return /^https?:\/\/|^\//.test(href) ? href : "#";
+}
+
 function renderMd(md: string): string {
-  return md
+  const safe = escapeHtml(md);
+  return safe
     .replace(/^# (.+)$/gm,   '<h1 class="text-2xl font-bold mt-6 mb-2">$1</h1>')
     .replace(/^## (.+)$/gm,  '<h2 class="text-xl font-bold mt-5 mb-2">$1</h2>')
     .replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold mt-4 mb-1">$1</h3>')
@@ -66,12 +81,15 @@ function renderMd(md: string): string {
     .replace(/\*(.+?)\*/g,     '<em>$1</em>')
     .replace(/`{3}([\s\S]+?)`{3}/g, '<pre class="bg-neutral-100 rounded-xl p-4 text-sm font-mono overflow-x-auto my-3"><code>$1</code></pre>')
     .replace(/`(.+?)`/g,       '<code class="bg-neutral-100 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>')
-    .replace(/^\> (.+)$/gm,    '<blockquote class="border-l-4 border-orange-400 pl-4 text-neutral-500 italic my-2">$1</blockquote>')
+    .replace(/^&gt; (.+)$/gm,  '<blockquote class="border-l-4 border-orange-400 pl-4 text-neutral-500 italic my-2">$1</blockquote>')
     .replace(/^---$/gm,        '<hr class="border-neutral-200 my-4" />')
-    .replace(/^\- (.+)$/gm,    '<li class="ml-4 list-disc">$1</li>')
+    .replace(/^- (.+)$/gm,     '<li class="ml-4 list-disc">$1</li>')
     .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-orange-500 underline">$1</a>')
-    .replace(/!\[(.+?)\]\((.+?)\)/g, '<img src="$2" alt="$1" class="rounded-xl max-w-full my-3" />')
+    .replace(/\[(.+?)\]\((.+?)\)/g, (_, text, href) => `<a href="${safeHref(href)}" class="text-orange-500 underline">${text}</a>`)
+    .replace(/!\[(.+?)\]\((.+?)\)/g, (_, alt, src) => {
+      const safeSrc = safeHref(src);
+      return `<img src="${safeSrc}" alt="${alt}" class="rounded-xl max-w-full my-3" />`;
+    })
     .split("\n\n").map(p => {
       if (p.match(/^<(h[1-3]|pre|blockquote|hr|li|ul|ol)/)) return p;
       if (p.trim() === "") return "";

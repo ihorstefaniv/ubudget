@@ -71,19 +71,34 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
+// Escape raw HTML entities to prevent XSS before markdown transformation
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Allow only http/https/relative links — blocks javascript: and data: URIs
+function safeHref(href: string): string {
+  return /^https?:\/\/|^\//.test(href) ? href : "#";
+}
+
 // Simple markdown to HTML renderer
 function renderContent(md: string): string {
-  return md
+  const safe = escapeHtml(md);
+  return safe
     .replace(/^### (.+)$/gm, "<h3>$1</h3>")
     .replace(/^## (.+)$/gm, "<h2>$1</h2>")
     .replace(/^# (.+)$/gm, "<h1>$1</h1>")
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/`(.+?)`/g, "<code>$1</code>")
-    .replace(/^> (.+)$/gm, "<blockquote>$1</blockquote>")
+    .replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>")
     .replace(/^- (.+)$/gm, "<li>$1</li>")
     .replace(/(<li>.*<\/li>\n?)+/g, "<ul>$&</ul>")
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
+    .replace(/\[(.+?)\]\((.+?)\)/g, (_, text, href) => `<a href="${safeHref(href)}">${text}</a>`)
     .replace(/\n\n/g, "</p><p>")
     .replace(/^(?!<[hbuplai])/gm, "")
     .split("\n\n").map(p =>

@@ -8,6 +8,12 @@ const PUBLIC_PREFIXES = [
   "/blog",
   "/free",
   "/tools",
+  "/about",
+  "/faq",
+  "/privacy",
+  "/terms",
+  "/feedback",
+  "/demo",
   "/api/geocode",
   "/api/route",
 ];

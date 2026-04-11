@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 function adminClient() {
   return createSupabaseAdmin(
@@ -34,6 +35,11 @@ async function verifyAdmin() {
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req.headers);
+    if (!rateLimit(`create-user:${ip}`, 10, 60 * 60_000)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+
     const caller = await verifyAdmin();
     if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

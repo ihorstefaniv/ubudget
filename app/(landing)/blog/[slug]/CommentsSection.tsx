@@ -48,12 +48,17 @@ export default function CommentsSection({ postId }: { postId: string }) {
   useEffect(() => { load(); }, [postId]);
 
   async function submit() {
-    if (!name.trim() || !text.trim()) { setError("Заповніть ім'я та коментар"); return; }
+    const trimmedName = name.trim();
+    const trimmedText = text.trim();
+    if (!trimmedName || !trimmedText) { setError("Заповніть ім'я та коментар"); return; }
+    if (trimmedName.length > 100) { setError("Ім'я занадто довге (макс. 100 символів)"); return; }
+    if (trimmedText.length < 3) { setError("Коментар занадто короткий"); return; }
+    if (trimmedText.length > 2000) { setError("Коментар занадто довгий (макс. 2000 символів)"); return; }
     setSending(true);
     setError("");
     const { error: err } = await supabase()
       .from("post_comments")
-      .insert({ post_id: postId, author_name: name.trim(), content: text.trim(), approved: false });
+      .insert({ post_id: postId, author_name: trimmedName, content: trimmedText, approved: false });
     setSending(false);
     if (err) { setError("Помилка. Спробуйте пізніше."); return; }
     setSuccess(true);

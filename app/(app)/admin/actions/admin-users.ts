@@ -4,6 +4,7 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,10 +13,24 @@ function getAdminClient() {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
+// Defense-in-depth: verify the caller is an admin even though middleware
+// already protects /admin routes. Server actions can be called directly.
+async function requireAdmin(): Promise<void> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+  const { data: profile } = await supabase
+    .from("profiles").select("role").eq("id", user.id).single();
+  if (!["admin", "superadmin"].includes(profile?.role ?? "")) {
+    throw new Error("Forbidden");
+  }
+}
+
 export async function getUsersWithEmails(): Promise<
   Array<{ id: string; email: string; created_at: string; last_sign_in_at: string | null }>
 > {
   try {
+    await requireAdmin();
     const admin = getAdminClient();
     const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 });
     if (error || !data) return [];
@@ -30,6 +45,7 @@ export async function createUserAdmin(params: {
   email: string; password: string; full_name: string; role: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAdmin();
     const admin = getAdminClient();
     const { data: existing } = await admin.auth.admin.listUsers({ perPage: 1000 });
     if (existing?.users.some(u => u.email === params.email)) {
@@ -55,6 +71,7 @@ export async function createUserAdmin(params: {
 
 export async function resetUserPassword(userId: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAdmin();
     const admin = getAdminClient();
     const { error } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
     if (error) return { success: false, error: error.message };
@@ -66,6 +83,7 @@ export async function resetUserPassword(userId: string, newPassword: string): Pr
 }
 
 export async function getSystemHealth() {
+  await requireAdmin();
   const admin = getAdminClient();
   const t0 = Date.now();
   const [
@@ -90,6 +108,7 @@ export async function getSystemHealth() {
 }
 
 export async function getAdminLogs(limit = 200) {
+  await requireAdmin();
   const admin = getAdminClient();
   const { data } = await admin
     .from("admin_logs")
@@ -118,6 +137,7 @@ export async function writeLog(
 export async function pingExternalServices(): Promise<Array<{
   name: string; url: string; ok: boolean; latency: number; status?: number;
 }>> {
+  await requireAdmin();
   const services = [
     { name: "Supabase DB",   url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/` },
     { name: "Supabase Auth", url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/health` },
@@ -137,6 +157,7 @@ export async function pingExternalServices(): Promise<Array<{
 }
 
 export async function getRegistrationChart(): Promise<Array<{ date: string; count: number }>> {
+  await requireAdmin();
   const admin = getAdminClient();
   const days: Array<{ date: string; count: number }> = [];
   for (let i = 6; i >= 0; i--) {
