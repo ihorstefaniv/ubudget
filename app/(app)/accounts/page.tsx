@@ -1,33 +1,51 @@
-/**
- * @file app/(app)/accounts/page.tsx
- * @description Сторінка "Рахунки & Активи".
- * Відображає всі 9 категорій рахунків з балансом, Net Worth зверху,
- * та модалки для додавання кожного типу активу.
- *
- * Рефакторинг: замінено локальні Icon/fmt/Modal/Input/Select/Toggle
- * на компоненти з @/components/ui та @/lib/format
- */
-
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Input, Select, Modal, Button, ToggleRow } from "@/components/ui";
 import { fmt } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────
 
-type AccountCategory =
-  | "cash" | "banking" | "deposit" | "credit"
-  | "installment" | "mortgage" | "property" | "crypto" | "collections";
+type AccType = "cash" | "banking" | "crypto" | "collections" | "property";
 
-type ModalType = AccountCategory | null;
+interface Account {
+  id: string;
+  name: string;
+  type: string;
+  balance: number;
+  currency: string;
+  icon?: string | null;
+  is_archived: boolean;
+}
+
+interface Credit {
+  id: string;
+  name: string;
+  type: string;
+  lender?: string | null;
+  total_amount?: number | null;
+  remaining_amount: number;
+  monthly_payment?: number | null;
+  payment_day?: number | null;
+  currency?: string | null;
+}
+
+interface Deposit {
+  id: string;
+  name?: string | null;
+  bank?: string | null;
+  amount: number;
+  currency: string;
+  interest_rate?: number | null;
+  end_date?: string | null;
+}
+
+type ModalType = AccType | null;
 
 // ─── Delete Confirm Modal ─────────────────────────────────────
 
-/**
- * Модалка підтвердження видалення рахунку.
- * Вимагає введення "ВИДАЛИТИ" для активації кнопки.
- */
 function DeleteModal({ name, onConfirm, onCancel }: {
   name: string;
   onConfirm: () => void;
@@ -47,7 +65,6 @@ function DeleteModal({ name, onConfirm, onCancel }: {
           Всі пов'язані транзакції будуть відв'язані. Цю дію не можна скасувати.
         </p>
       </div>
-
       <Input
         label='Введіть ВИДАЛИТИ для підтвердження'
         value={input}
@@ -55,7 +72,6 @@ function DeleteModal({ name, onConfirm, onCancel }: {
         placeholder="ВИДАЛИТИ"
         className="border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/10 focus:border-red-400"
       />
-
       <div className="flex gap-3">
         <Button variant="secondary" fullWidth onClick={onCancel}>Скасувати</Button>
         <Button variant="danger" fullWidth disabled={!ready} onClick={onConfirm}>Видалити</Button>
@@ -66,10 +82,6 @@ function DeleteModal({ name, onConfirm, onCancel }: {
 
 // ─── Account Card ─────────────────────────────────────────────
 
-/**
- * Рядок рахунку в секції — назва, підпис, баланс, кнопки редагування/видалення.
- * Кнопки показуються при hover (group-hover).
- */
 function AccountCard({ name, sub, balance, currency = "UAH", badge, onDelete }: {
   name: string;
   sub: string;
@@ -81,7 +93,6 @@ function AccountCard({ name, sub, balance, currency = "UAH", badge, onDelete }: 
   return (
     <div className="group flex items-center justify-between p-4 rounded-xl border border-neutral-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-orange-200 dark:hover:border-orange-900 transition-all">
       <div className="flex items-center gap-3">
-        {/* Іконка-емоджі */}
         <div className="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-base shrink-0">
           {badge ?? "💳"}
         </div>
@@ -90,16 +101,11 @@ function AccountCard({ name, sub, balance, currency = "UAH", badge, onDelete }: 
           <p className="text-xs text-neutral-400">{sub}</p>
         </div>
       </div>
-
       <div className="flex items-center gap-3">
         <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
           {fmt(balance, currency)}
         </p>
-        {/* Кнопки показуються лише при hover */}
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button className="w-7 h-7 rounded-lg bg-neutral-50 dark:bg-neutral-800 text-neutral-400 hover:text-orange-400 flex items-center justify-center transition-colors">
-            <Icon d={icons.edit} className="w-3.5 h-3.5" />
-          </button>
           <button
             onClick={onDelete}
             className="w-7 h-7 rounded-lg bg-neutral-50 dark:bg-neutral-800 text-neutral-400 hover:text-red-400 flex items-center justify-center transition-colors"
@@ -114,23 +120,19 @@ function AccountCard({ name, sub, balance, currency = "UAH", badge, onDelete }: 
 
 // ─── Section ──────────────────────────────────────────────────
 
-/**
- * Розгортальна секція категорії рахунків.
- * Показує загальний баланс і кнопку "Додати".
- */
-function Section({ title, total, currency = "UAH", onAdd, children, defaultOpen = true }: {
+function Section({ title, total, currency = "UAH", onAdd, children, defaultOpen = true, addLabel = "Додати" }: {
   title: string;
   total: number;
   currency?: string;
-  onAdd: () => void;
+  onAdd?: () => void;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  addLabel?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 overflow-hidden">
-      {/* Заголовок секції — клікабельний для розгортання */}
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-5 py-4 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
@@ -141,27 +143,26 @@ function Section({ title, total, currency = "UAH", onAdd, children, defaultOpen 
         </div>
         <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{fmt(total, currency)}</span>
       </button>
-
       {open && (
         <div className="px-4 pb-4 space-y-2 border-t border-neutral-50 dark:border-neutral-800 pt-3">
           {children}
-          {/* Кнопка додавання — пунктирний бордер */}
-          <button
-            onClick={onAdd}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 text-sm hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-400 transition-all"
-          >
-            <Icon d={icons.plus} className="w-4 h-4" />
-            Додати
-          </button>
+          {onAdd && (
+            <button
+              onClick={onAdd}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 text-sm hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-400 transition-all"
+            >
+              <Icon d={icons.plus} className="w-4 h-4" />
+              {addLabel}
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Modals ───────────────────────────────────────────────────
+// ─── SubBlock ─────────────────────────────────────────────────
 
-/** Блок кредитних/депозитних параметрів — повторюється в кількох модалках */
 function SubBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
@@ -171,32 +172,81 @@ function SubBlock({ title, children }: { title: string; children: React.ReactNod
   );
 }
 
-function CashModal({ onClose }: { onClose: () => void }) {
+// ─── Add Modals ───────────────────────────────────────────────
+
+const CURRENCIES = [
+  { value: "UAH", label: "UAH — Гривня" },
+  { value: "USD", label: "USD — Долар" },
+  { value: "EUR", label: "EUR — Євро" },
+  { value: "PLN", label: "PLN — Злотий" },
+];
+
+function CashModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const supabase = createClient();
+  const [name, setName]         = useState("");
+  const [currency, setCurrency] = useState("UAH");
+  const [balance, setBalance]   = useState("");
+  const [icon, setIcon]         = useState("👛");
+  const [saving, setSaving]     = useState(false);
+
+  async function handleSave() {
+    if (!name.trim()) return;
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+    await supabase.from("accounts").insert({
+      user_id: user.id, name: name.trim(), type: "cash",
+      balance: parseFloat(balance) || 0, currency, icon,
+    });
+    setSaving(false);
+    onSaved();
+    onClose();
+  }
+
   return (
     <Modal title="Додати готівку" onClose={onClose}>
-      <Input label="Назва групи" placeholder="Гаманець, Копілка, Сейф..." />
-      <Select label="Іконка" options={[
-        { value: "wallet", label: "👛 Гаманець" },
-        { value: "safe",   label: "🏦 Сейф" },
-        { value: "piggy",  label: "🪙 Копілка" },
-        { value: "bag",    label: "💼 Портфель" },
+      <Input label="Назва групи" value={name} onChange={e => setName(e.target.value)} placeholder="Гаманець, Копілка, Сейф..." />
+      <Select label="Іконка" value={icon} onChange={e => setIcon(e.target.value)} options={[
+        { value: "👛", label: "👛 Гаманець" },
+        { value: "🏦", label: "🏦 Сейф" },
+        { value: "🪙", label: "🪙 Копілка" },
+        { value: "💼", label: "💼 Портфель" },
       ]} />
-      <Select label="Валюта" options={[
-        { value: "UAH", label: "UAH — Гривня" },
-        { value: "USD", label: "USD — Долар" },
-        { value: "EUR", label: "EUR — Євро" },
-        { value: "PLN", label: "PLN — Злотий" },
-      ]} />
-      <Input label="Сума" type="number" placeholder="0.00" />
-      <Input label="Опис (необов'язково)" placeholder="Для подорожей, резерв..." />
-      <Button fullWidth onClick={onClose}>Додати</Button>
+      <Select label="Валюта" value={currency} onChange={e => setCurrency(e.target.value)} options={CURRENCIES} />
+      <Input label="Сума" type="number" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0.00" />
+      <Button fullWidth onClick={handleSave} disabled={saving || !name.trim()}>{saving ? "Збереження..." : "Додати"}</Button>
     </Modal>
   );
 }
 
-function BankingModal({ onClose }: { onClose: () => void }) {
+function BankingModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const supabase = createClient();
   const [type, setType]           = useState("debit");
+  const [bank, setBank]           = useState("");
+  const [accName, setAccName]     = useState("");
+  const [currency, setCurrency]   = useState("UAH");
+  const [balance, setBalance]     = useState("");
   const [hasService, setHasService] = useState(false);
+  const [saving, setSaving]       = useState(false);
+
+  async function handleSave() {
+    const name = accName.trim() || bank.trim();
+    if (!name) return;
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+    await supabase.from("accounts").insert({
+      user_id: user.id,
+      name: bank.trim() ? `${bank.trim()} · ${name}` : name,
+      type: "banking",
+      balance: parseFloat(balance) || 0,
+      currency,
+      icon: type === "credit" ? "🔴" : "💳",
+    });
+    setSaving(false);
+    onSaved();
+    onClose();
+  }
 
   return (
     <Modal title="Додати банківський рахунок" onClose={onClose}>
@@ -207,26 +257,12 @@ function BankingModal({ onClose }: { onClose: () => void }) {
         { value: "fop",     label: "ФОП рахунок" },
         { value: "virtual", label: "Віртуальна картка" },
       ]} />
-      <Input label="Назва банку" placeholder="Monobank, ПриватБанк..." />
-      <Input label="Назва рахунку" placeholder="Моя картка" />
+      <Input label="Назва банку" value={bank} onChange={e => setBank(e.target.value)} placeholder="Monobank, ПриватБанк..." />
+      <Input label="Назва рахунку" value={accName} onChange={e => setAccName(e.target.value)} placeholder="Моя картка" />
       <div className="grid grid-cols-2 gap-3">
-        <Input label="Баланс" type="number" placeholder="0.00" />
-        <Select label="Валюта" options={[
-          { value: "UAH", label: "UAH" }, { value: "USD", label: "USD" }, { value: "EUR", label: "EUR" },
-        ]} />
+        <Input label="Баланс" type="number" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0.00" />
+        <Select label="Валюта" value={currency} onChange={e => setCurrency(e.target.value)} options={CURRENCIES.slice(0, 3)} />
       </div>
-
-      {/* Кредитні параметри — показуються тільки для кредитної картки */}
-      {type === "credit" && (
-        <SubBlock title="Кредитні параметри">
-          <Input label="Кредитний ліміт" type="number" placeholder="0.00" />
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="% ставка річна" type="number" placeholder="0.00" />
-            <Input label="День виписки" type="number" placeholder="25" />
-          </div>
-        </SubBlock>
-      )}
-
       <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
         <ToggleRow
           label="Плата за обслуговування"
@@ -234,298 +270,106 @@ function BankingModal({ onClose }: { onClose: () => void }) {
           checked={hasService}
           onChange={setHasService}
         />
-        {hasService && (
-          <div className="space-y-3 pt-2 border-t border-neutral-100 dark:border-neutral-700">
-            <Input label="Сума" type="number" placeholder="0.00" />
-            <Select label="Періодичність" options={[
-              { value: "monthly",   label: "Щомісяця" },
-              { value: "quarterly", label: "Щоквартально" },
-              { value: "yearly",    label: "Щорічно" },
-            ]} />
-            <Input label="День списання" type="number" placeholder="1" min={1} max={31} />
-          </div>
-        )}
       </div>
-
-      <Button fullWidth onClick={onClose}>Додати</Button>
+      <Button fullWidth onClick={handleSave} disabled={saving || (!bank.trim() && !accName.trim())}>{saving ? "Збереження..." : "Додати"}</Button>
     </Modal>
   );
 }
 
-function DepositModal({ onClose }: { onClose: () => void }) {
-  const [autoProlongation, setAutoProlongation] = useState(false);
-  const [capitalization, setCapitalization]     = useState(true);
+function CryptoModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const supabase = createClient();
+  const [assetType, setAssetType] = useState("crypto");
+  const [name, setName]         = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [buyPrice, setBuyPrice] = useState("");
+  const [wallet, setWallet]     = useState("");
+  const [saving, setSaving]     = useState(false);
 
-  return (
-    <Modal title="Додати депозит" onClose={onClose}>
-      <Input label="Назва" placeholder="Депозит ПриватБанк" />
-      <Input label="Банк" placeholder="Назва банку" />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Сума" type="number" placeholder="0.00" />
-        <Select label="Валюта" options={[
-          { value: "UAH", label: "UAH" }, { value: "USD", label: "USD" }, { value: "EUR", label: "EUR" },
-        ]} />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="% ставка річна" type="number" placeholder="0.00" />
-        <Select label="Нарахування %" options={[
-          { value: "monthly",   label: "Щомісяця" },
-          { value: "quarterly", label: "Щоквартально" },
-          { value: "end",       label: "В кінці строку" },
-        ]} />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Дата відкриття" type="date" />
-        <Input label="Дата закриття" type="date" />
-      </div>
-
-      <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-1">
-        <ToggleRow label="Капіталізація відсотків" desc="% додаються до тіла депозиту" checked={capitalization}    onChange={setCapitalization} />
-        <ToggleRow label="Авто пролонгація"        desc="Автоматично продовжувати після закінчення" checked={autoProlongation} onChange={setAutoProlongation} />
-      </div>
-
-      <SubBlock title="Операції з депозитом">
-        <Select label="Рахунок для виводу %" options={[
-          { value: "mono",   label: "Monobank — основна" },
-          { value: "privat", label: "ПриватБанк" },
-        ]} />
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Поповнити на суму" type="number" placeholder="0.00" />
-          <Input label="Вивести на суму" type="number" placeholder="0.00" />
-        </div>
-        <p className="text-xs text-neutral-400">Виведення доступне після відкриття депозиту</p>
-      </SubBlock>
-
-      <Button fullWidth onClick={onClose}>Додати</Button>
-    </Modal>
-  );
-}
-
-function CreditModal({ onClose }: { onClose: () => void }) {
-  const [hasHidden, setHasHidden] = useState(false);
-  const [hasExtra, setHasExtra]   = useState(false);
-  const [rateType, setRateType]   = useState("fixed");
-
-  return (
-    <Modal title="Додати кредит" onClose={onClose}>
-      <Input label="Назва" placeholder="Авто кредит, Споживчий..." />
-      <Input label="Банк / Кредитор" placeholder="Назва банку або особи" />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Загальна сума" type="number" placeholder="0.00" />
-        <Select label="Валюта" options={[
-          { value: "UAH", label: "UAH" }, { value: "USD", label: "USD" }, { value: "EUR", label: "EUR" },
-        ]} />
-      </div>
-      <Input label="Залишок боргу" type="number" placeholder="0.00" />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Щомісячний платіж" type="number" placeholder="0.00" />
-        <Input label="Дата платежу (день)" type="number" placeholder="15" min={1} max={31} />
-      </div>
-
-      <SubBlock title="Відсоткова ставка">
-        <Select label="Тип ставки" value={rateType} onChange={e => setRateType(e.target.value)} options={[
-          { value: "fixed", label: "Фіксована" },
-          { value: "float", label: "Плаваюча" },
-        ]} />
-        <Input label="% ставка річна" type="number" placeholder="0.00" />
-        {rateType === "float" && <Input label="Максимальна ставка" type="number" placeholder="0.00" />}
-      </SubBlock>
-
-      <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
-        <ToggleRow label="Приховані платежі" desc="Страховка, комісії, обслуговування" checked={hasHidden} onChange={setHasHidden} />
-        {hasHidden && (
-          <div className="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-700">
-            <Input label="Страховка (на рік)" type="number" placeholder="0.00" />
-            <Input label="Комісія за обслуговування (на місяць)" type="number" placeholder="0.00" />
-            <Input label="Інші приховані платежі" type="number" placeholder="0.00" />
-          </div>
-        )}
-      </div>
-
-      <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
-        <ToggleRow label="Додаткові витрати" desc="Разові або нерегулярні витрати по кредиту" checked={hasExtra} onChange={setHasExtra} />
-        {hasExtra && (
-          <div className="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-700">
-            <Input label="Назва витрати" placeholder="Оцінка майна, нотаріус..." />
-            <Input label="Сума" type="number" placeholder="0.00" />
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Дата відкриття" type="date" />
-        <Input label="Дата закриття" type="date" />
-      </div>
-      <Button fullWidth onClick={onClose}>Додати</Button>
-    </Modal>
-  );
-}
-
-function InstallmentModal({ onClose }: { onClose: () => void }) {
-  const [hasPercent, setHasPercent] = useState(false);
-  const [model, setModel]           = useState("1");
-
-  return (
-    <Modal title="Оплата частинами" onClose={onClose}>
-      <Input label="На що (товар / послуга)" placeholder="iPhone 15, Курс, Меблі..." />
-      <Input label="Магазин / Продавець" placeholder="Назва" />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Загальна сума" type="number" placeholder="0.00" />
-        <Input label="Кількість частин" type="number" placeholder="12" />
-      </div>
-      <Input label="Вже сплачено частин" type="number" placeholder="0" />
-
-      <SubBlock title="Модель оплати">
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            { val: "1", label: "З 1-го місяця", desc: "Перший платіж одразу" },
-            { val: "2", label: "З 2-го місяця", desc: "Перший платіж через місяць" },
-          ].map(({ val, label, desc }) => (
-            <button
-              key={val}
-              onClick={() => setModel(val)}
-              className={`p-3 rounded-xl border text-left transition-all ${
-                model === val
-                  ? "border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30"
-                  : "border-neutral-200 dark:border-neutral-700 hover:border-neutral-300"
-              }`}
-            >
-              <p className={`text-sm font-medium ${model === val ? "text-orange-500" : "text-neutral-800 dark:text-neutral-200"}`}>{label}</p>
-              <p className="text-xs text-neutral-400 mt-0.5">{desc}</p>
-            </button>
-          ))}
-        </div>
-      </SubBlock>
-
-      <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
-        <ToggleRow label="Додати %" desc="Якщо розтермінування з відсотками" checked={hasPercent} onChange={setHasPercent} />
-        {hasPercent && <Input label="% ставка річна" type="number" placeholder="0.00" />}
-      </div>
-
-      <Input label="Дата першого платежу" type="date" />
-      <Button fullWidth onClick={onClose}>Додати</Button>
-    </Modal>
-  );
-}
-
-function MortgageModal({ onClose }: { onClose: () => void }) {
-  return (
-    <Modal title="Іпотека" onClose={onClose}>
-      <Input label="Назва об'єкту" placeholder="Квартира на Хрещатику..." />
-      <Input label="Банк" placeholder="Назва банку" />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Вартість об'єкту" type="number" placeholder="0.00" />
-        <Input label="Перший внесок" type="number" placeholder="0.00" />
-      </div>
-      <Input label="Сума кредиту" type="number" placeholder="Розраховується автоматично" readOnly hint="Заповнюється автоматично" />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="% ставка річна" type="number" placeholder="0.00" />
-        <Input label="Страховка (на рік)" type="number" placeholder="0.00" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Строк (роки)" type="number" placeholder="20" />
-        <Input label="Дата видачі" type="date" />
-      </div>
-      <Input label="Залишок боргу" type="number" placeholder="0.00" />
-      <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30">
-        <p className="text-xs text-orange-600 dark:text-orange-400 font-medium">
-          💡 Щомісячний платіж розраховується автоматично на основі суми, ставки та строку
-        </p>
-      </div>
-      <Input label="День платежу" type="number" placeholder="15" min={1} max={31} />
-      <Button fullWidth onClick={onClose}>Додати</Button>
-    </Modal>
-  );
-}
-
-function PropertyModal({ onClose }: { onClose: () => void }) {
-  return (
-    <Modal title="Розтермінування нерухомості" onClose={onClose}>
-      <Input label="Назва об'єкту" placeholder="ЖК Сонячний, кв. 45" />
-      <Input label="Адреса" placeholder="вул. Шевченка, 12" />
-      <Input label="Забудовник" placeholder="Назва компанії" />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Загальна вартість" type="number" placeholder="0.00" />
-        <Select label="Валюта" options={[
-          { value: "UAH", label: "UAH" }, { value: "USD", label: "USD" }, { value: "EUR", label: "EUR" },
-        ]} />
-      </div>
-      <Input label="Вже сплачено" type="number" placeholder="0.00" />
-      <Select label="Статус об'єкту" options={[
-        { value: "building", label: "🏗 Будується" },
-        { value: "done",     label: "✅ Здано" },
-        { value: "planned",  label: "📋 Планується" },
-      ]} />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Дата договору" type="date" />
-        <Input label="Плановий термін здачі" type="date" />
-      </div>
-      <SubBlock title="Графік платежів">
-        <p className="text-xs text-neutral-400">Довільний графік — різні суми в різні дати. Можна додати після створення.</p>
-      </SubBlock>
-      <Button fullWidth onClick={onClose}>Додати</Button>
-    </Modal>
-  );
-}
-
-function CryptoModal({ onClose }: { onClose: () => void }) {
-  const [type, setType] = useState("crypto");
+  async function handleSave() {
+    if (!name.trim()) return;
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+    const qty = parseFloat(quantity) || 0;
+    const price = parseFloat(buyPrice) || 0;
+    await supabase.from("accounts").insert({
+      user_id: user.id,
+      name: wallet.trim() ? `${name.trim()} · ${wallet.trim()}` : name.trim(),
+      type: "crypto",
+      balance: qty * price,
+      currency: "USD",
+      icon: assetType === "crypto" ? "₿" : "🥇",
+    });
+    setSaving(false);
+    onSaved();
+    onClose();
+  }
 
   return (
     <Modal title="Крипто & Метали" onClose={onClose}>
       <div className="grid grid-cols-2 gap-2">
         {[{ val: "crypto", label: "🪙 Крипто" }, { val: "metal", label: "🥇 Метали" }].map(({ val, label }) => (
-          <button key={val} onClick={() => setType(val)}
+          <button key={val} onClick={() => setAssetType(val)}
             className={`py-2.5 rounded-xl border text-sm font-medium transition-all ${
-              type === val
+              assetType === val
                 ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500"
                 : "border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400"
             }`}>{label}</button>
         ))}
       </div>
-
-      {type === "crypto" && (
+      {assetType === "crypto" ? (
         <>
-          <Select label="Монета" options={[
-            { value: "btc",   label: "Bitcoin (BTC)" },
-            { value: "eth",   label: "Ethereum (ETH)" },
-            { value: "usdt",  label: "USDT" },
-            { value: "bnb",   label: "BNB" },
-            { value: "other", label: "Інша..." },
-          ]} />
+          <Input label="Монета / Тікер" value={name} onChange={e => setName(e.target.value)} placeholder="Bitcoin (BTC)" />
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Кількість" type="number" placeholder="0.00000000" />
-            <Input label="Ціна купівлі (USD)" type="number" placeholder="0.00" />
+            <Input label="Кількість" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0.00000000" />
+            <Input label="Ціна купівлі (USD)" type="number" value={buyPrice} onChange={e => setBuyPrice(e.target.value)} placeholder="0.00" />
           </div>
-          <Input label="Гаманець / Біржа (необов'язково)" placeholder="Binance, MetaMask..." />
+          <Input label="Гаманець / Біржа (необов'язково)" value={wallet} onChange={e => setWallet(e.target.value)} placeholder="Binance, MetaMask..." />
+        </>
+      ) : (
+        <>
+          <Input label="Метал" value={name} onChange={e => setName(e.target.value)} placeholder="Золото, Срібло..." />
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Кількість (грами)" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0.00" />
+            <Input label="Ціна купівлі (грн/г)" type="number" value={buyPrice} onChange={e => setBuyPrice(e.target.value)} placeholder="0.00" />
+          </div>
+          <Input label="Де зберігається" value={wallet} onChange={e => setWallet(e.target.value)} placeholder="Банк, вдома..." />
         </>
       )}
-
-      {type === "metal" && (
-        <>
-          <Select label="Метал" options={[
-            { value: "gold",     label: "🥇 Золото" },
-            { value: "silver",   label: "🥈 Срібло" },
-            { value: "platinum", label: "Платина" },
-          ]} />
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Кількість (грами)" type="number" placeholder="0.00" />
-            <Input label="Ціна купівлі (грн/г)" type="number" placeholder="0.00" />
-          </div>
-          <Input label="Де зберігається" placeholder="Банк, вдома..." />
-        </>
-      )}
-
-      <Button fullWidth onClick={onClose}>Додати</Button>
+      <Button fullWidth onClick={handleSave} disabled={saving || !name.trim()}>{saving ? "Збереження..." : "Додати"}</Button>
     </Modal>
   );
 }
 
-function CollectionModal({ onClose }: { onClose: () => void }) {
+function CollectionModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const supabase = createClient();
+  const [name, setName]         = useState("");
+  const [category, setCategory] = useState("coins");
+  const [buyPrice, setBuyPrice] = useState("");
+  const [saving, setSaving]     = useState(false);
+
+  async function handleSave() {
+    if (!name.trim()) return;
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+    await supabase.from("accounts").insert({
+      user_id: user.id,
+      name: name.trim(),
+      type: "collections",
+      balance: parseFloat(buyPrice) || 0,
+      currency: "UAH",
+      icon: "🎨",
+    });
+    setSaving(false);
+    onSaved();
+    onClose();
+  }
+
   return (
     <Modal title="Додати колекційний актив" onClose={onClose}>
-      <Input label="Назва" placeholder="Монета 1 карбованець 1961р." />
-      <Select label="Категорія" options={[
+      <Input label="Назва" value={name} onChange={e => setName(e.target.value)} placeholder="Монета 1 карбованець 1961р." />
+      <Select label="Категорія" value={category} onChange={e => setCategory(e.target.value)} options={[
         { value: "coins",    label: "🪙 Нумізматика" },
         { value: "stamps",   label: "📮 Філателія" },
         { value: "art",      label: "🖼 Мистецтво" },
@@ -534,20 +378,8 @@ function CollectionModal({ onClose }: { onClose: () => void }) {
         { value: "military", label: "🎖 Військові артефакти" },
         { value: "other",    label: "Інше" },
       ]} />
-      <Input label="Опис" placeholder="Деталі, рік, стан..." />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Ціна купівлі (грн)" type="number" placeholder="0.00" />
-        <Input label="Ціна купівлі (USD)" type="number" placeholder="0.00" />
-      </div>
-      <Input label="Очікувана ціна продажу (грн)" type="number" placeholder="0.00" />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Дата придбання" type="date" />
-        <Select label="Статус" options={[
-          { value: "own",  label: "✅ Власність" },
-          { value: "sold", label: "💰 Продано" },
-        ]} />
-      </div>
-      <Button fullWidth onClick={onClose}>Додати</Button>
+      <Input label="Вартість (грн)" type="number" value={buyPrice} onChange={e => setBuyPrice(e.target.value)} placeholder="0.00" />
+      <Button fullWidth onClick={handleSave} disabled={saving || !name.trim()}>{saving ? "Збереження..." : "Додати"}</Button>
     </Modal>
   );
 }
@@ -555,15 +387,76 @@ function CollectionModal({ onClose }: { onClose: () => void }) {
 // ─── PAGE ─────────────────────────────────────────────────────
 
 export default function AccountsPage() {
-  const [modal, setModal]             = useState<ModalType>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ name: string } | null>(null);
+  const supabase = createClient();
 
-  // TODO: замінити на реальні дані з Supabase
-  const netWorth  = 124_500;
-  const breakdown = {
-    cash: 8_200, banking: 67_300, deposits: 25_000,
-    credits: -12_000, crypto: 18_000, collections: 18_000,
+  const [modal, setModal]             = useState<ModalType>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
+  const [accounts, setAccounts]   = useState<Account[]>([]);
+  const [credits, setCredits]     = useState<Credit[]>([]);
+  const [deposits, setDeposits]   = useState<Deposit[]>([]);
+  const [loading, setLoading]     = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLoading(false); return; }
+
+    const [{ data: accs }, { data: cr }, { data: dep }] = await Promise.all([
+      supabase.from("accounts").select("id,name,type,balance,currency,icon,is_archived")
+        .eq("user_id", user.id).eq("is_archived", false).order("created_at"),
+      supabase.from("credits").select("id,name,type,lender,total_amount,remaining_amount,monthly_payment,payment_day,currency")
+        .eq("user_id", user.id).eq("is_archived", false).order("created_at"),
+      supabase.from("deposits").select("id,name,bank,amount,currency,interest_rate,end_date")
+        .eq("user_id", user.id).eq("is_archived", false).order("created_at"),
+    ]);
+
+    setAccounts(accs ?? []);
+    setCredits(cr ?? []);
+    setDeposits(dep ?? []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    await supabase.from("accounts").update({ is_archived: true }).eq("id", deleteTarget.id);
+    setDeleteTarget(null);
+    load();
+  }
+
+  // ─── Derived ──────────────────────────────────────────────
+  const byType = (type: string) => accounts.filter(a => a.type === type);
+  const sumOf  = (arr: Account[]) => arr.reduce((s, a) => s + Number(a.balance), 0);
+
+  const cashAccs        = byType("cash");
+  const bankingAccs     = byType("banking");
+  const cryptoAccs      = byType("crypto");
+  const collectionAccs  = byType("collections");
+  const propertyAccs    = byType("property");
+
+  const totalCash        = sumOf(cashAccs);
+  const totalBanking     = sumOf(bankingAccs);
+  const totalCrypto      = sumOf(cryptoAccs);
+  const totalCollections = sumOf(collectionAccs);
+  const totalProperty    = sumOf(propertyAccs);
+
+  const totalCredits  = credits.reduce((s, c) => s + Number(c.remaining_amount), 0);
+  const totalDeposits = deposits.reduce((s, d) => s + Number(d.amount), 0);
+
+  const netWorth = totalCash + totalBanking + totalDeposits + totalCrypto + totalCollections + totalProperty - totalCredits;
+
+  const CREDIT_TYPE_LABELS: Record<string, string> = {
+    consumer: "Споживчий", car: "Авто", mortgage: "Іпотека",
+    credit_card: "Кредитна картка", installment: "Розтермінування", partpay: "Частинами",
   };
+
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-96">
+      <Icon d={icons.loader} className="w-8 h-8 text-orange-400 animate-spin" />
+    </div>
+  );
 
   return (
     <div className="space-y-6 pb-8">
@@ -577,16 +470,14 @@ export default function AccountsPage() {
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-6">
         <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Баланс моїх активів</p>
         <p className="text-4xl font-bold text-neutral-900 dark:text-neutral-100 mb-5">{fmt(netWorth)}</p>
-
-        {/* Розбивка по типах */}
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
           {[
-            { label: "Готівка",  val: breakdown.cash,        color: "text-emerald-500" },
-            { label: "Рахунки",  val: breakdown.banking,     color: "text-blue-500" },
-            { label: "Депозити", val: breakdown.deposits,    color: "text-violet-500" },
-            { label: "Борги",    val: breakdown.credits,     color: "text-red-500" },
-            { label: "Крипто",   val: breakdown.crypto,      color: "text-amber-500" },
-            { label: "Колекції", val: breakdown.collections, color: "text-pink-500" },
+            { label: "Готівка",  val: totalCash,        color: "text-emerald-500" },
+            { label: "Рахунки",  val: totalBanking,     color: "text-blue-500" },
+            { label: "Депозити", val: totalDeposits,    color: "text-violet-500" },
+            { label: "Борги",    val: -totalCredits,    color: "text-red-500" },
+            { label: "Крипто",   val: totalCrypto,      color: "text-amber-500" },
+            { label: "Колекції", val: totalCollections, color: "text-pink-500" },
           ].map(({ label, val, color }) => (
             <div key={label} className="text-center p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50">
               <p className={`text-sm font-bold ${color}`}>
@@ -598,63 +489,149 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {/* ── Секції рахунків ── */}
-      <Section title="💵 Готівка" total={8200} onAdd={() => setModal("cash")}>
-        <AccountCard name="Гаманець"  sub="UAH · EUR · USD" balance={4200} onDelete={() => setDeleteTarget({ name: "Гаманець" })}  badge="👛" />
-        <AccountCard name="Копілка"   sub="UAH"             balance={4000} onDelete={() => setDeleteTarget({ name: "Копілка" })}   badge="🪙" />
+      {/* ── Готівка ── */}
+      <Section title="💵 Готівка" total={totalCash} onAdd={() => setModal("cash")}>
+        {cashAccs.length === 0 ? (
+          <p className="text-xs text-neutral-400 text-center py-2">Немає готівкових рахунків</p>
+        ) : cashAccs.map(a => (
+          <AccountCard key={a.id} name={a.name} sub={a.currency}
+            balance={Number(a.balance)} currency={a.currency}
+            badge={a.icon ?? "👛"} onDelete={() => setDeleteTarget({ id: a.id, name: a.name })} />
+        ))}
       </Section>
 
-      <Section title="💳 Банківські рахунки" total={67300} onAdd={() => setModal("banking")}>
-        <AccountCard name="Monobank"      sub="Дебетова · UAH"              balance={14200}  onDelete={() => setDeleteTarget({ name: "Monobank" })}      badge="🟡" />
-        <AccountCard name="ПриватБанк"   sub="Дебетова · UAH"              balance={8700}   onDelete={() => setDeleteTarget({ name: "ПриватБанк" })}    badge="🟢" />
-        <AccountCard name="Кредитна Mono" sub="Кредитна · ліміт 20 000 грн" balance={-3400}  onDelete={() => setDeleteTarget({ name: "Кредитна Mono" })} badge="🔴" />
+      {/* ── Банківські рахунки ── */}
+      <Section title="💳 Банківські рахунки" total={totalBanking} onAdd={() => setModal("banking")}>
+        {bankingAccs.length === 0 ? (
+          <p className="text-xs text-neutral-400 text-center py-2">Немає банківських рахунків</p>
+        ) : bankingAccs.map(a => (
+          <AccountCard key={a.id} name={a.name} sub={a.currency}
+            balance={Number(a.balance)} currency={a.currency}
+            badge={a.icon ?? "💳"} onDelete={() => setDeleteTarget({ id: a.id, name: a.name })} />
+        ))}
       </Section>
 
-      <Section title="🏦 Депозити" total={25000} onAdd={() => setModal("deposit")}>
-        <AccountCard name="Депозит ПриватБанк" sub="14.5% річних · до 01.06.2025" balance={25000} onDelete={() => setDeleteTarget({ name: "Депозит ПриватБанк" })} badge="📈" />
+      {/* ── Депозити — керуються через /credits ── */}
+      <Section title="🏦 Депозити" total={totalDeposits} defaultOpen={true}
+        onAdd={undefined}
+      >
+        {deposits.length === 0 ? (
+          <div className="text-center py-2">
+            <p className="text-xs text-neutral-400 mb-2">Немає активних депозитів</p>
+            <Link href="/credits?tab=deposits" className="text-xs text-orange-400 hover:text-orange-500 font-medium">
+              Додати депозит →
+            </Link>
+          </div>
+        ) : deposits.map(d => (
+          <AccountCard key={d.id}
+            name={d.name ?? d.bank ?? "Депозит"}
+            sub={[d.bank, d.interest_rate ? `${d.interest_rate}% річних` : null, d.end_date ? `до ${new Date(d.end_date).toLocaleDateString("uk-UA")}` : null].filter(Boolean).join(" · ")}
+            balance={Number(d.amount)} currency={d.currency}
+            badge="📈" onDelete={() => {}} />
+        ))}
+        {deposits.length > 0 && (
+          <Link href="/credits?tab=deposits"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 text-sm hover:border-orange-300 hover:text-orange-400 transition-all">
+            <Icon d={icons.plus} className="w-4 h-4" />
+            Додати депозит
+          </Link>
+        )}
       </Section>
 
-      <Section title="💸 Кредити" total={-12000} onAdd={() => setModal("credit")}>
-        <AccountCard name="Споживчий кредит" sub="Укрсиббанк · 18% · до 2026" balance={-12000} onDelete={() => setDeleteTarget({ name: "Споживчий кредит" })} badge="📋" />
+      {/* ── Кредити — керуються через /credits ── */}
+      <Section title="💸 Кредити & Борги" total={-totalCredits} defaultOpen={true}
+        onAdd={undefined}
+      >
+        {credits.filter(c => ["consumer", "car", "credit_card"].includes(c.type)).length === 0 ? (
+          <div className="text-center py-2">
+            <p className="text-xs text-neutral-400 mb-2">Немає активних кредитів</p>
+            <Link href="/credits" className="text-xs text-orange-400 hover:text-orange-500 font-medium">
+              Додати кредит →
+            </Link>
+          </div>
+        ) : credits.filter(c => ["consumer", "car", "credit_card"].includes(c.type)).map(c => (
+          <AccountCard key={c.id}
+            name={c.name}
+            sub={[CREDIT_TYPE_LABELS[c.type], c.lender, c.monthly_payment ? `${fmt(c.monthly_payment)}/міс` : null].filter(Boolean).join(" · ")}
+            balance={-Number(c.remaining_amount)} currency={c.currency ?? "UAH"}
+            badge="📋" onDelete={() => {}} />
+        ))}
+        {credits.filter(c => ["consumer", "car", "credit_card"].includes(c.type)).length > 0 && (
+          <Link href="/credits"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-500 text-sm hover:border-orange-300 hover:text-orange-400 transition-all">
+            <Icon d={icons.plus} className="w-4 h-4" />
+            Додати кредит
+          </Link>
+        )}
       </Section>
 
-      <Section title="🛒 Оплата частинами" total={-8400} onAdd={() => setModal("installment")} defaultOpen={false}>
-        <AccountCard name="iPhone 15 Pro" sub="8 з 12 частин · Monobank" balance={-8400} onDelete={() => setDeleteTarget({ name: "iPhone 15 Pro" })} badge="📱" />
+      {/* ── Оплата частинами ── */}
+      <Section title="🛒 Оплата частинами" total={-credits.filter(c => ["installment","partpay"].includes(c.type)).reduce((s,c) => s + Number(c.remaining_amount), 0)} defaultOpen={false}>
+        {credits.filter(c => ["installment", "partpay"].includes(c.type)).length === 0 ? (
+          <div className="text-center py-2">
+            <p className="text-xs text-neutral-400 mb-2">Немає активних розтермінувань</p>
+            <Link href="/credits" className="text-xs text-orange-400 hover:text-orange-500 font-medium">Додати →</Link>
+          </div>
+        ) : credits.filter(c => ["installment", "partpay"].includes(c.type)).map(c => (
+          <AccountCard key={c.id}
+            name={c.name}
+            sub={[c.lender, c.monthly_payment ? `${fmt(c.monthly_payment)}/міс` : null].filter(Boolean).join(" · ")}
+            balance={-Number(c.remaining_amount)} currency={c.currency ?? "UAH"}
+            badge="📱" onDelete={() => {}} />
+        ))}
       </Section>
 
-      <Section title="🏠 Іпотека" total={-180000} onAdd={() => setModal("mortgage")} defaultOpen={false}>
-        <AccountCard name="Квартира вул. Шевченка" sub="ОТП Банк · 7% · 20 років" balance={-180000} onDelete={() => setDeleteTarget({ name: "Квартира" })} badge="🏠" />
+      {/* ── Іпотека ── */}
+      <Section title="🏠 Іпотека" total={-credits.filter(c => c.type === "mortgage").reduce((s,c) => s + Number(c.remaining_amount), 0)} defaultOpen={false}>
+        {credits.filter(c => c.type === "mortgage").length === 0 ? (
+          <div className="text-center py-2">
+            <p className="text-xs text-neutral-400 mb-2">Немає іпотеки</p>
+            <Link href="/credits" className="text-xs text-orange-400 hover:text-orange-500 font-medium">Додати →</Link>
+          </div>
+        ) : credits.filter(c => c.type === "mortgage").map(c => (
+          <AccountCard key={c.id}
+            name={c.name}
+            sub={[c.lender, c.monthly_payment ? `${fmt(c.monthly_payment)}/міс` : null].filter(Boolean).join(" · ")}
+            balance={-Number(c.remaining_amount)} currency={c.currency ?? "UAH"}
+            badge="🏠" onDelete={() => {}} />
+        ))}
       </Section>
 
-      <Section title="🏗 Розтермінування нерухомості" total={-45000} onAdd={() => setModal("property")} defaultOpen={false}>
-        <AccountCard name="ЖК Сонячний, кв. 45" sub="Будується · здача 2026" balance={-45000} onDelete={() => setDeleteTarget({ name: "ЖК Сонячний" })} badge="🏗" />
+      {/* ── Крипто & Метали ── */}
+      <Section title="🪙 Крипто & Метали" total={totalCrypto} onAdd={() => setModal("crypto")} defaultOpen={false}>
+        {cryptoAccs.length === 0 ? (
+          <p className="text-xs text-neutral-400 text-center py-2">Немає крипто-активів</p>
+        ) : cryptoAccs.map(a => (
+          <AccountCard key={a.id} name={a.name}
+            sub={a.currency}
+            balance={Number(a.balance)} currency={a.currency}
+            badge={a.icon ?? "₿"} onDelete={() => setDeleteTarget({ id: a.id, name: a.name })} />
+        ))}
       </Section>
 
-      <Section title="🪙 Крипто & Метали" total={18000} onAdd={() => setModal("crypto")} defaultOpen={false}>
-        <AccountCard name="Bitcoin" sub="0.00412 BTC · Binance" balance={12000} onDelete={() => setDeleteTarget({ name: "Bitcoin" })} badge="₿" />
-        <AccountCard name="Золото"  sub="5г · НБУ курс"         balance={6000}  onDelete={() => setDeleteTarget({ name: "Золото" })}   badge="🥇" />
-      </Section>
-
-      <Section title="🎨 Колекції" total={18000} onAdd={() => setModal("collections")} defaultOpen={false}>
-        <AccountCard name="Монета 1 карб. 1961р." sub="Нумізматика · відмінний стан" balance={4500} onDelete={() => setDeleteTarget({ name: "Монета" })} badge="🪙" />
+      {/* ── Колекції ── */}
+      <Section title="🎨 Колекції" total={totalCollections} onAdd={() => setModal("collections")} defaultOpen={false}>
+        {collectionAccs.length === 0 ? (
+          <p className="text-xs text-neutral-400 text-center py-2">Немає колекційних активів</p>
+        ) : collectionAccs.map(a => (
+          <AccountCard key={a.id} name={a.name}
+            sub={a.currency}
+            balance={Number(a.balance)} currency={a.currency}
+            badge={a.icon ?? "🎨"} onDelete={() => setDeleteTarget({ id: a.id, name: a.name })} />
+        ))}
       </Section>
 
       {/* ── Модалки ── */}
-      {modal === "cash"        && <CashModal        onClose={() => setModal(null)} />}
-      {modal === "banking"     && <BankingModal     onClose={() => setModal(null)} />}
-      {modal === "deposit"     && <DepositModal     onClose={() => setModal(null)} />}
-      {modal === "credit"      && <CreditModal      onClose={() => setModal(null)} />}
-      {modal === "installment" && <InstallmentModal onClose={() => setModal(null)} />}
-      {modal === "mortgage"    && <MortgageModal    onClose={() => setModal(null)} />}
-      {modal === "property"    && <PropertyModal    onClose={() => setModal(null)} />}
-      {modal === "crypto"      && <CryptoModal      onClose={() => setModal(null)} />}
-      {modal === "collections" && <CollectionModal  onClose={() => setModal(null)} />}
+      {modal === "cash"        && <CashModal        onClose={() => setModal(null)} onSaved={load} />}
+      {modal === "banking"     && <BankingModal     onClose={() => setModal(null)} onSaved={load} />}
+      {modal === "crypto"      && <CryptoModal      onClose={() => setModal(null)} onSaved={load} />}
+      {modal === "collections" && <CollectionModal  onClose={() => setModal(null)} onSaved={load} />}
 
       {/* ── Підтвердження видалення ── */}
       {deleteTarget && (
         <DeleteModal
           name={deleteTarget.name}
-          onConfirm={() => setDeleteTarget(null)}
+          onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
         />
       )}

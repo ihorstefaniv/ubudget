@@ -9,8 +9,9 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Icon, icons, Input, Select, Toggle, ToggleRow, Card, Button, Badge } from "@/components/ui";
+import { createClient } from "@/lib/supabase/client";
 
 type Tab = "profile" | "appearance" | "family" | "notifications" | "security";
 
@@ -35,11 +36,68 @@ function Section({ title, desc, children }: { title: string; desc?: string; chil
 // ─── 1. Профіль ───────────────────────────────────────────────
 
 function ProfileTab() {
-  const [name, setName]               = useState("Ігор Стефанів");
-  const [email]                       = useState("igor@example.com");
-  const [phone, setPhone]             = useState("+380 99 123 45 67");
+  const supabase = createClient();
+
+  const [name, setName]               = useState("");
+  const [email, setEmail]             = useState("");
+  const [phone, setPhone]             = useState("");
   const [birthday, setBirthday]       = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [saveMsg, setSaveMsg]         = useState("");
+
+  const [oldPwd, setOldPwd]           = useState("");
+  const [newPwd, setNewPwd]           = useState("");
+  const [confirmPwd, setConfirmPwd]   = useState("");
+  const [pwdMsg, setPwdMsg]           = useState("");
+  const [pwdSaving, setPwdSaving]     = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      setEmail(data.user.email ?? "");
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, phone, birthday")
+        .eq("id", data.user.id)
+        .single();
+      if (profile) {
+        setName(profile.full_name ?? "");
+        setPhone(profile.phone ?? "");
+        setBirthday(profile.birthday ?? "");
+      }
+    });
+  }, []);
+
+  async function handleSaveProfile() {
+    setSaving(true);
+    setSaveMsg("");
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) { setSaving(false); return; }
+    const { error } = await supabase
+      .from("profiles")
+      .update({ full_name: name.trim(), phone: phone.trim(), birthday: birthday || null })
+      .eq("id", data.user.id);
+    setSaveMsg(error ? "Помилка збереження" : "Збережено");
+    setSaving(false);
+    setTimeout(() => setSaveMsg(""), 3000);
+  }
+
+  async function handleChangePassword() {
+    if (!newPwd || newPwd !== confirmPwd) {
+      setPwdMsg("Паролі не збігаються"); return;
+    }
+    if (newPwd.length < 8) {
+      setPwdMsg("Мінімум 8 символів"); return;
+    }
+    setPwdSaving(true);
+    setPwdMsg("");
+    const { error } = await supabase.auth.updateUser({ password: newPwd });
+    setPwdMsg(error ? "Помилка: " + error.message : "Пароль змінено");
+    setPwdSaving(false);
+    if (!error) { setOldPwd(""); setNewPwd(""); setConfirmPwd(""); }
+    setTimeout(() => setPwdMsg(""), 4000);
+  }
 
   return (
     <div className="space-y-4">
@@ -47,7 +105,7 @@ function ProfileTab() {
         {/* Аватар */}
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-orange-100 dark:bg-orange-950 flex items-center justify-center text-orange-500 text-2xl font-bold shrink-0">
-            {name[0]}
+            {name?.[0]?.toUpperCase() ?? "?"}
           </div>
           <div>
             <button className="text-sm font-medium text-orange-400 hover:text-orange-500 transition-colors">
@@ -66,18 +124,24 @@ function ProfileTab() {
           <Input label="Телефон" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+380..." />
         </div>
 
-        <Button>Зберегти зміни</Button>
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSaveProfile} disabled={saving}>{saving ? "Збереження..." : "Зберегти зміни"}</Button>
+          {saveMsg && <span className="text-sm text-green-500">{saveMsg}</span>}
+        </div>
       </Section>
 
       <Section title="Зміна пароля">
-        <Input label="Поточний пароль" type={showPassword ? "text" : "password"} placeholder="••••••••" />
+        <Input label="Поточний пароль" type={showPassword ? "text" : "password"} value={oldPwd} onChange={e => setOldPwd(e.target.value)} placeholder="••••••••" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Новий пароль" type={showPassword ? "text" : "password"} placeholder="Мінімум 8 символів" />
-          <Input label="Підтвердити пароль" type={showPassword ? "text" : "password"} placeholder="Повторіть пароль" />
+          <Input label="Новий пароль" type={showPassword ? "text" : "password"} value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="Мінімум 8 символів" />
+          <Input label="Підтвердити пароль" type={showPassword ? "text" : "password"} value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder="Повторіть пароль" />
         </div>
         <div className="flex items-center justify-between">
           <ToggleRow label="Показати пароль" checked={showPassword} onChange={setShowPassword} />
-          <Button>Змінити пароль</Button>
+          <div className="flex items-center gap-3">
+            {pwdMsg && <span className={`text-sm ${pwdMsg.startsWith("Помилка") ? "text-red-500" : "text-green-500"}`}>{pwdMsg}</span>}
+            <Button onClick={handleChangePassword} disabled={pwdSaving}>{pwdSaving ? "Збереження..." : "Змінити пароль"}</Button>
+          </div>
         </div>
       </Section>
     </div>
