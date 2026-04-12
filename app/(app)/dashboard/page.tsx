@@ -11,6 +11,14 @@ interface Account { id: string; name: string; type: string; balance: number; cur
 interface Transaction { id: string; type: string; amount: number; note: string | null; transaction_date: string; category_key: string | null; }
 interface Credit { id: string; remaining_amount: number; monthly_payment: number; payment_day: number | null; }
 interface Deposit { id: string; amount: number; currency: string; }
+interface Stock { id: string; quantity: number; current_price: number; currency: string; }
+interface Bond { id: string; amount: number; currency: string; }
+interface RealEstate { id: string; current_price: number; currency: string; }
+interface Collection { id: string; expected_price: number; currency: string; }
+
+const USD_RATE = 41.5;
+const EUR_RATE = 44.8;
+function toUAH(n: number, cur: string) { return n * (cur === "USD" ? USD_RATE : cur === "EUR" ? EUR_RATE : 1); }
 
 // ─── Helpers ──────────────────────────────────────────────────
 function fmt(n: number, cur = "UAH") {
@@ -84,11 +92,15 @@ export default function DashboardPage() {
   const [period, setPeriod]     = useState<Period>("month");
   const [loading, setLoading]   = useState(true);
 
-  const [accounts, setAccounts]     = useState<Account[]>([]);
-  const [txs, setTxs]               = useState<Transaction[]>([]);
-  const [credits, setCredits]       = useState<Credit[]>([]);
-  const [deposits, setDeposits]     = useState<Deposit[]>([]);
-  const [budgetPlan, setBudgetPlan] = useState(0);
+  const [accounts, setAccounts]       = useState<Account[]>([]);
+  const [txs, setTxs]                 = useState<Transaction[]>([]);
+  const [credits, setCredits]         = useState<Credit[]>([]);
+  const [deposits, setDeposits]       = useState<Deposit[]>([]);
+  const [budgetPlan, setBudgetPlan]   = useState(0);
+  const [stocks, setStocks]           = useState<Stock[]>([]);
+  const [bonds, setBonds]             = useState<Bond[]>([]);
+  const [realEstate, setRealEstate]   = useState<RealEstate[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,7 +114,10 @@ export default function DashboardPage() {
     const m = now.getMonth() + 1;
     const y = now.getFullYear();
 
-    const [{ data: accs }, { data: txData }, { data: cr }, { data: dep }, { data: budgets }] = await Promise.all([
+    const [
+      { data: accs }, { data: txData }, { data: cr }, { data: dep }, { data: budgets },
+      { data: stks }, { data: bnd }, { data: re }, { data: col },
+    ] = await Promise.all([
       supabase.from("accounts").select("id,name,type,balance,currency,icon").eq("user_id", user.id).eq("is_archived", false).order("balance", { ascending: false }),
       supabase.from("transactions").select("id,type,amount,note,transaction_date,category_key")
         .eq("user_id", user.id).is("deleted_at", null)
@@ -110,6 +125,10 @@ export default function DashboardPage() {
       supabase.from("credits").select("id,remaining_amount,monthly_payment,payment_day").eq("user_id", user.id).eq("is_archived", false),
       supabase.from("deposits").select("id,amount,currency").eq("user_id", user.id).eq("is_archived", false),
       supabase.from("budgets").select("plan_amount").eq("user_id", user.id).eq("month", m).eq("year", y),
+      supabase.from("stocks").select("id,quantity,current_price,currency").eq("user_id", user.id),
+      supabase.from("bonds").select("id,amount,currency").eq("user_id", user.id),
+      supabase.from("real_estate").select("id,current_price,currency").eq("user_id", user.id),
+      supabase.from("collections").select("id,expected_price,currency").eq("user_id", user.id),
     ]);
 
     setAccounts(accs ?? []);
@@ -117,6 +136,10 @@ export default function DashboardPage() {
     setCredits(cr ?? []);
     setDeposits(dep ?? []);
     setBudgetPlan((budgets ?? []).reduce((s, b) => s + Number(b.plan_amount), 0));
+    setStocks(stks ?? []);
+    setBonds(bnd ?? []);
+    setRealEstate(re ?? []);
+    setCollections(col ?? []);
     setLoading(false);
   }, []);
 
@@ -127,11 +150,21 @@ export default function DashboardPage() {
   const cashAccounts = accounts.filter(a => a.type === "cash");
   const bankAccounts = accounts.filter(a => a.type === "banking" || a.type === "deposit");
 
-  const netWorth     = uahAccounts.reduce((s, a) => s + Number(a.balance), 0);
   const totalCash    = cashAccounts.reduce((s, a) => s + Number(a.balance), 0);
   const totalBanking = bankAccounts.reduce((s, a) => s + Number(a.balance), 0);
   const totalDebt    = credits.reduce((s, c) => s + Number(c.remaining_amount), 0);
-  const totalDeposit = deposits.filter(d => d.currency === "UAH").reduce((s, d) => s + Number(d.amount), 0);
+  const totalDeposit = deposits.reduce((s, d) => s + toUAH(Number(d.amount), d.currency), 0);
+
+  const totalInvestments =
+    stocks.reduce((s, st) => s + toUAH(Number(st.quantity) * Number(st.current_price), st.currency), 0) +
+    bonds.reduce((s, b) => s + toUAH(Number(b.amount), b.currency), 0) +
+    realEstate.reduce((s, r) => s + toUAH(Number(r.current_price), r.currency), 0) +
+    collections.reduce((s, c) => s + toUAH(Number(c.expected_price), c.currency), 0);
+
+  const netWorth =
+    uahAccounts.reduce((s, a) => s + Number(a.balance), 0) +
+    totalInvestments -
+    totalDebt;
 
   const periodStart = startOf(period);
   const periodTxs   = txs.filter(t => t.transaction_date >= periodStart);
@@ -195,12 +228,13 @@ export default function DashboardPage() {
       <Card className="p-6">
         <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Загальний баланс (UAH)</p>
         <p className="text-4xl font-bold text-neutral-900 dark:text-neutral-100 mb-4">{fmt(netWorth)}</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           {[
-            { label: "Готівка",  value: totalCash,    color: "text-green-500"  },
-            { label: "Рахунки",  value: totalBanking, color: "text-blue-500"   },
-            { label: "Депозити", value: totalDeposit, color: "text-purple-500" },
-            { label: "Борги",    value: -totalDebt,   color: "text-red-500"    },
+            { label: "Готівка",     value: totalCash,         color: "text-green-500"  },
+            { label: "Рахунки",     value: totalBanking,      color: "text-blue-500"   },
+            { label: "Депозити",    value: totalDeposit,      color: "text-purple-500" },
+            { label: "Інвестиції",  value: totalInvestments,  color: "text-orange-500" },
+            { label: "Борги",       value: -totalDebt,        color: "text-red-500"    },
           ].map(({ label, value, color }) => (
             <div key={label}>
               <p className={`text-sm font-semibold ${color}`}>
@@ -448,7 +482,7 @@ export default function DashboardPage() {
           {[
             { href: "/credits",              label: "Кредити",    emoji: "💳", desc: `${credits.length} активних` },
             { href: "/credits?tab=deposits", label: "Депозити",   emoji: "🏦", desc: deposits.length > 0 ? fmt(totalDeposit) : "Немає" },
-            { href: "/investments",          label: "Інвестиції", emoji: "📈", desc: "Портфель" },
+            { href: "/investments",          label: "Інвестиції", emoji: "📈", desc: totalInvestments > 0 ? fmt(totalInvestments) : "Портфель" },
             { href: "/envelopes",            label: "Конверти",   emoji: "✉️", desc: "Метод конвертів" },
           ].map(({ href, label, emoji, desc }) => (
             <Link key={href} href={href}
