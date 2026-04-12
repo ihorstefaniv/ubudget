@@ -7,9 +7,30 @@ import { Icon, icons, Input, Select, Modal, Button, ToggleRow } from "@/componen
 import { fmt } from "@/lib/format";
 
 // ─── Currency helpers ─────────────────────────────────────────
-const USD_RATE = 41.5;
-function toUAH(n: number, cur: string) {
-  return n * (cur === "USD" ? USD_RATE : cur === "EUR" ? USD_RATE * 1.08 : cur === "PLN" ? 10.0 : 1);
+interface Rates { USD: number; EUR: number; PLN: number; }
+const FALLBACK_RATES: Rates = { USD: 41.5, EUR: 44.8, PLN: 10.2 };
+
+async function fetchNbuRates(): Promise<Rates> {
+  try {
+    const [usdRes, eurRes, plnRes] = await Promise.all([
+      fetch("https://bank.gov.ua/NBU_Exchange/exchange?valcode=USD&json"),
+      fetch("https://bank.gov.ua/NBU_Exchange/exchange?valcode=EUR&json"),
+      fetch("https://bank.gov.ua/NBU_Exchange/exchange?valcode=PLN&json"),
+    ]);
+    const [usd, eur, pln] = await Promise.all([usdRes.json(), eurRes.json(), plnRes.json()]);
+    return {
+      USD: usd[0]?.rate ?? FALLBACK_RATES.USD,
+      EUR: eur[0]?.rate ?? FALLBACK_RATES.EUR,
+      PLN: pln[0]?.rate ?? FALLBACK_RATES.PLN,
+    };
+  } catch {
+    return FALLBACK_RATES;
+  }
+}
+
+function makeToUAH(rates: Rates) {
+  return (n: number, cur: string) =>
+    n * (cur === "USD" ? rates.USD : cur === "EUR" ? rates.EUR : cur === "PLN" ? rates.PLN : 1);
 }
 
 // ─── Types ────────────────────────────────────────────────────
@@ -425,6 +446,7 @@ export default function AccountsPage() {
   const [credits, setCredits]     = useState<Credit[]>([]);
   const [deposits, setDeposits]   = useState<Deposit[]>([]);
   const [loading, setLoading]     = useState(true);
+  const [rates, setRates]         = useState<Rates>(FALLBACK_RATES);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -446,7 +468,10 @@ export default function AccountsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    fetchNbuRates().then(setRates);
+  }, [load]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -456,6 +481,7 @@ export default function AccountsPage() {
   }
 
   // ─── Derived ──────────────────────────────────────────────
+  const toUAH   = makeToUAH(rates);
   const byType  = (type: string) => accounts.filter(a => a.type === type);
   const sumUAH  = (arr: Account[]) => arr.reduce((s, a) => s + toUAH(Number(a.balance), a.currency), 0);
 
@@ -497,7 +523,14 @@ export default function AccountsPage() {
 
       {/* ── Net Worth ── */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-6">
-        <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Баланс моїх активів</p>
+        <div className="flex items-start justify-between mb-1">
+          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Баланс моїх активів</p>
+          <p className="text-xs text-neutral-400">
+            НБУ: <span className="font-medium text-neutral-500">USD {rates.USD.toFixed(2)}</span>
+            {" · "}
+            <span className="font-medium text-neutral-500">EUR {rates.EUR.toFixed(2)}</span>
+          </p>
+        </div>
         <p className="text-4xl font-bold text-neutral-900 dark:text-neutral-100 mb-5">{fmt(netWorth)}</p>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
           {[
