@@ -6,6 +6,12 @@ import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Input, Select, Modal, Button, ToggleRow } from "@/components/ui";
 import { fmt } from "@/lib/format";
 
+// ─── Currency helpers ─────────────────────────────────────────
+const USD_RATE = 41.5;
+function toUAH(n: number, cur: string) {
+  return n * (cur === "USD" ? USD_RATE : cur === "EUR" ? USD_RATE * 1.08 : cur === "PLN" ? 10.0 : 1);
+}
+
 // ─── Types ────────────────────────────────────────────────────
 
 type AccType = "cash" | "banking" | "crypto" | "collections" | "property";
@@ -120,7 +126,7 @@ function AccountCard({ name, sub, balance, currency = "UAH", badge, onDelete }: 
 
 // ─── Section ──────────────────────────────────────────────────
 
-function Section({ title, total, currency = "UAH", onAdd, children, defaultOpen = true, addLabel = "Додати" }: {
+function Section({ title, total, currency = "UAH", onAdd, children, defaultOpen = true, addLabel = "Додати", manageHref }: {
   title: string;
   total: number;
   currency?: string;
@@ -128,6 +134,7 @@ function Section({ title, total, currency = "UAH", onAdd, children, defaultOpen 
   children: React.ReactNode;
   defaultOpen?: boolean;
   addLabel?: string;
+  manageHref?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -141,7 +148,15 @@ function Section({ title, total, currency = "UAH", onAdd, children, defaultOpen 
           <Icon d={icons.chevDown} className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
           <span className="font-semibold text-neutral-900 dark:text-neutral-100 text-sm">{title}</span>
         </div>
-        <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{fmt(total, currency)}</span>
+        <div className="flex items-center gap-3">
+          {manageHref && (
+            <Link href={manageHref} onClick={e => e.stopPropagation()}
+              className="text-xs text-orange-400 hover:text-orange-500 font-medium transition-colors">
+              Управляти →
+            </Link>
+          )}
+          <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{fmt(total, currency)}</span>
+        </div>
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-2 border-t border-neutral-50 dark:border-neutral-800 pt-3">
@@ -149,7 +164,7 @@ function Section({ title, total, currency = "UAH", onAdd, children, defaultOpen 
           {onAdd && (
             <button
               onClick={onAdd}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 text-sm hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-400 transition-all"
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 text-orange-500 text-sm font-medium hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-all"
             >
               <Icon d={icons.plus} className="w-4 h-4" />
               {addLabel}
@@ -188,8 +203,10 @@ function CashModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
   const [balance, setBalance]   = useState("");
   const [icon, setIcon]         = useState("👛");
   const [saving, setSaving]     = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   async function handleSave() {
+    setSubmitted(true);
     if (!name.trim()) return;
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -205,7 +222,8 @@ function CashModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
 
   return (
     <Modal title="Додати готівку" onClose={onClose}>
-      <Input label="Назва групи" value={name} onChange={e => setName(e.target.value)} placeholder="Гаманець, Копілка, Сейф..." />
+      <Input label="Назва групи *" value={name} onChange={e => setName(e.target.value)} placeholder="Гаманець, Копілка, Сейф..."
+        error={submitted && !name.trim() ? "Вкажіть назву" : undefined} />
       <Select label="Іконка" value={icon} onChange={e => setIcon(e.target.value)} options={[
         { value: "👛", label: "👛 Гаманець" },
         { value: "🏦", label: "🏦 Сейф" },
@@ -228,8 +246,13 @@ function BankingModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const [balance, setBalance]     = useState("");
   const [hasService, setHasService] = useState(false);
   const [saving, setSaving]       = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const bankErr   = submitted && !bank.trim();
+  const accErr    = submitted && !accName.trim();
 
   async function handleSave() {
+    setSubmitted(true);
     const name = accName.trim() || bank.trim();
     if (!name) return;
     setSaving(true);
@@ -257,8 +280,10 @@ function BankingModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
         { value: "fop",     label: "ФОП рахунок" },
         { value: "virtual", label: "Віртуальна картка" },
       ]} />
-      <Input label="Назва банку" value={bank} onChange={e => setBank(e.target.value)} placeholder="Monobank, ПриватБанк..." />
-      <Input label="Назва рахунку" value={accName} onChange={e => setAccName(e.target.value)} placeholder="Моя картка" />
+      <Input label="Назва банку *" value={bank} onChange={e => setBank(e.target.value)} placeholder="Monobank, ПриватБанк..."
+        error={bankErr ? "Вкажіть назву банку" : undefined} />
+      <Input label="Назва рахунку *" value={accName} onChange={e => setAccName(e.target.value)} placeholder="Моя картка"
+        error={accErr ? "Вкажіть назву рахунку" : undefined} />
       <div className="grid grid-cols-2 gap-3">
         <Input label="Баланс" type="number" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0.00" />
         <Select label="Валюта" value={currency} onChange={e => setCurrency(e.target.value)} options={CURRENCIES.slice(0, 3)} />
@@ -284,8 +309,10 @@ function CryptoModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [buyPrice, setBuyPrice] = useState("");
   const [wallet, setWallet]     = useState("");
   const [saving, setSaving]     = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   async function handleSave() {
+    setSubmitted(true);
     if (!name.trim()) return;
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -319,7 +346,8 @@ function CryptoModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       </div>
       {assetType === "crypto" ? (
         <>
-          <Input label="Монета / Тікер" value={name} onChange={e => setName(e.target.value)} placeholder="Bitcoin (BTC)" />
+          <Input label="Монета / Тікер *" value={name} onChange={e => setName(e.target.value)} placeholder="Bitcoin (BTC)"
+            error={submitted && !name.trim() ? "Вкажіть назву" : undefined} />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Кількість" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0.00000000" />
             <Input label="Ціна купівлі (USD)" type="number" value={buyPrice} onChange={e => setBuyPrice(e.target.value)} placeholder="0.00" />
@@ -328,7 +356,8 @@ function CryptoModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         </>
       ) : (
         <>
-          <Input label="Метал" value={name} onChange={e => setName(e.target.value)} placeholder="Золото, Срібло..." />
+          <Input label="Метал *" value={name} onChange={e => setName(e.target.value)} placeholder="Золото, Срібло..."
+            error={submitted && !name.trim() ? "Вкажіть назву" : undefined} />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Кількість (грами)" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0.00" />
             <Input label="Ціна купівлі (грн/г)" type="number" value={buyPrice} onChange={e => setBuyPrice(e.target.value)} placeholder="0.00" />
@@ -427,8 +456,8 @@ export default function AccountsPage() {
   }
 
   // ─── Derived ──────────────────────────────────────────────
-  const byType = (type: string) => accounts.filter(a => a.type === type);
-  const sumOf  = (arr: Account[]) => arr.reduce((s, a) => s + Number(a.balance), 0);
+  const byType  = (type: string) => accounts.filter(a => a.type === type);
+  const sumUAH  = (arr: Account[]) => arr.reduce((s, a) => s + toUAH(Number(a.balance), a.currency), 0);
 
   const cashAccs        = byType("cash");
   const bankingAccs     = byType("banking");
@@ -436,14 +465,14 @@ export default function AccountsPage() {
   const collectionAccs  = byType("collections");
   const propertyAccs    = byType("property");
 
-  const totalCash        = sumOf(cashAccs);
-  const totalBanking     = sumOf(bankingAccs);
-  const totalCrypto      = sumOf(cryptoAccs);
-  const totalCollections = sumOf(collectionAccs);
-  const totalProperty    = sumOf(propertyAccs);
+  const totalCash        = sumUAH(cashAccs);
+  const totalBanking     = sumUAH(bankingAccs);
+  const totalCrypto      = sumUAH(cryptoAccs);
+  const totalCollections = sumUAH(collectionAccs);
+  const totalProperty    = sumUAH(propertyAccs);
 
-  const totalCredits  = credits.reduce((s, c) => s + Number(c.remaining_amount), 0);
-  const totalDeposits = deposits.reduce((s, d) => s + Number(d.amount), 0);
+  const totalCredits  = credits.reduce((s, c) => s + toUAH(Number(c.remaining_amount), c.currency ?? "UAH"), 0);
+  const totalDeposits = deposits.reduce((s, d) => s + toUAH(Number(d.amount), d.currency), 0);
 
   const netWorth = totalCash + totalBanking + totalDeposits + totalCrypto + totalCollections + totalProperty - totalCredits;
 
@@ -512,9 +541,7 @@ export default function AccountsPage() {
       </Section>
 
       {/* ── Депозити — керуються через /credits ── */}
-      <Section title="🏦 Депозити" total={totalDeposits} defaultOpen={true}
-        onAdd={undefined}
-      >
+      <Section title="🏦 Депозити" total={totalDeposits} defaultOpen={true} manageHref="/credits?tab=deposits">
         {deposits.length === 0 ? (
           <div className="text-center py-2">
             <p className="text-xs text-neutral-400 mb-2">Немає активних депозитів</p>
@@ -539,9 +566,7 @@ export default function AccountsPage() {
       </Section>
 
       {/* ── Кредити — керуються через /credits ── */}
-      <Section title="💸 Кредити & Борги" total={-totalCredits} defaultOpen={true}
-        onAdd={undefined}
-      >
+      <Section title="💸 Кредити & Борги" total={-totalCredits} defaultOpen={true} manageHref="/credits">
         {credits.filter(c => ["consumer", "car", "credit_card"].includes(c.type)).length === 0 ? (
           <div className="text-center py-2">
             <p className="text-xs text-neutral-400 mb-2">Немає активних кредитів</p>
@@ -566,7 +591,7 @@ export default function AccountsPage() {
       </Section>
 
       {/* ── Оплата частинами ── */}
-      <Section title="🛒 Оплата частинами" total={-credits.filter(c => ["installment","partpay"].includes(c.type)).reduce((s,c) => s + Number(c.remaining_amount), 0)} defaultOpen={false}>
+      <Section title="🛒 Оплата частинами" total={-credits.filter(c => ["installment","partpay"].includes(c.type)).reduce((s,c) => s + toUAH(Number(c.remaining_amount), c.currency ?? "UAH"), 0)} defaultOpen={false} manageHref="/credits">
         {credits.filter(c => ["installment", "partpay"].includes(c.type)).length === 0 ? (
           <div className="text-center py-2">
             <p className="text-xs text-neutral-400 mb-2">Немає активних розтермінувань</p>
@@ -582,7 +607,7 @@ export default function AccountsPage() {
       </Section>
 
       {/* ── Іпотека ── */}
-      <Section title="🏠 Іпотека" total={-credits.filter(c => c.type === "mortgage").reduce((s,c) => s + Number(c.remaining_amount), 0)} defaultOpen={false}>
+      <Section title="🏠 Іпотека" total={-credits.filter(c => c.type === "mortgage").reduce((s,c) => s + toUAH(Number(c.remaining_amount), c.currency ?? "UAH"), 0)} defaultOpen={false} manageHref="/credits">
         {credits.filter(c => c.type === "mortgage").length === 0 ? (
           <div className="text-center py-2">
             <p className="text-xs text-neutral-400 mb-2">Немає іпотеки</p>
@@ -598,7 +623,7 @@ export default function AccountsPage() {
       </Section>
 
       {/* ── Крипто & Метали ── */}
-      <Section title="🪙 Крипто & Метали" total={totalCrypto} onAdd={() => setModal("crypto")} defaultOpen={false}>
+      <Section title="🪙 Крипто & Метали" total={totalCrypto} onAdd={() => setModal("crypto")} defaultOpen={false} manageHref="/investments">
         {cryptoAccs.length === 0 ? (
           <p className="text-xs text-neutral-400 text-center py-2">Немає крипто-активів</p>
         ) : cryptoAccs.map(a => (
@@ -610,7 +635,7 @@ export default function AccountsPage() {
       </Section>
 
       {/* ── Колекції ── */}
-      <Section title="🎨 Колекції" total={totalCollections} onAdd={() => setModal("collections")} defaultOpen={false}>
+      <Section title="🎨 Колекції" total={totalCollections} onAdd={() => setModal("collections")} defaultOpen={false} manageHref="/investments">
         {collectionAccs.length === 0 ? (
           <p className="text-xs text-neutral-400 text-center py-2">Немає колекційних активів</p>
         ) : collectionAccs.map(a => (
