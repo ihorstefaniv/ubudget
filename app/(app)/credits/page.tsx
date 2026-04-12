@@ -78,7 +78,7 @@ function depositIncome(d: Deposit) {
   return d.amount * (d.interest_rate / 100) * (months / 12);
 }
 
-const NBU_RATE = 15.5;
+const NBU_RATE = 14.5;
 
 const TYPE_META: Record<CreditType, { label: string; emoji: string }> = {
   consumer:    { label: "Споживчий",        emoji: "💳" },
@@ -160,22 +160,31 @@ function CreditModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved:
     return ml > 0 ? Math.ceil(+f.remaining_amount / ml) : 0;
   })();
 
+  const needsEndDate = !isInstall && type !== "credit_card";
+
   const errs: Record<string, string> = {};
   if (!f.name.trim()) errs.name = "Обов'язкове поле";
   if (!f.total_amount || +f.total_amount <= 0) errs.total_amount = "Вкажіть суму";
   if (!isInstall) {
     if (!f.remaining_amount) errs.remaining_amount = "Обов'язкове поле";
     else if (+f.remaining_amount > +f.total_amount) errs.remaining_amount = "Не може бути більше загальної суми";
-    if (f.monthly_payment && f.remaining_amount && +f.monthly_payment > +f.remaining_amount)
-      errs.monthly_payment = "Не може бути більше залишку боргу";
+    if (!f.monthly_payment || +f.monthly_payment <= 0) errs.monthly_payment = "Вкажіть платіж";
+    else if (+f.monthly_payment > +f.remaining_amount) errs.monthly_payment = "Не може бути більше залишку боргу";
   } else {
     if (!f.installments || +f.installments <= 0) errs.installments = "Вкажіть кількість частин";
     if (f.paid_count && +f.paid_count >= +f.installments) errs.paid_count = "Не може бути ≥ кількості частин";
   }
   if (f.payment_day && (+f.payment_day < 1 || +f.payment_day > 31)) errs.payment_day = "1–31";
+  if (!f.start_date) errs.start_date = "Вкажіть дату відкриття";
+  if (needsEndDate && !f.end_date) errs.end_date = "Вкажіть дату закриття";
+  if (f.start_date && f.end_date && f.end_date <= f.start_date) errs.end_date = "Має бути після дати відкриття";
 
   async function save() {
-    const req = isInstall ? ["name", "total_amount", "installments"] : ["name", "total_amount", "remaining_amount"];
+    const req = isInstall
+      ? ["name", "total_amount", "installments", "start_date"]
+      : needsEndDate
+        ? ["name", "total_amount", "remaining_amount", "monthly_payment", "start_date", "end_date"]
+        : ["name", "total_amount", "remaining_amount", "monthly_payment", "start_date"];
     setTouched(Object.fromEntries(req.map(k => [k, true])));
     if (req.some(k => errs[k])) return;
     setSaving(true);
@@ -282,6 +291,10 @@ function CreditModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved:
             </div>
           )}
 
+          <Field label="Дата відкриття" required error={touched.start_date ? errs.start_date : undefined}>
+            <input type="date" value={f.start_date} onChange={e => upd("start_date", e.target.value)} onBlur={() => touch("start_date")} className={cls("start_date")} />
+          </Field>
+
           <Field label="Перший платіж">
             <div className="grid grid-cols-2 gap-2">
               {[{ v: "1", l: "З 1-го місяця" }, { v: "2", l: "З 2-го місяця" }].map(({ v, l }) => (
@@ -320,7 +333,7 @@ function CreditModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved:
             <Field label="Залишок боргу" required error={touched.remaining_amount ? errs.remaining_amount : undefined}>
               <input type="number" value={f.remaining_amount} onChange={e => upd("remaining_amount", e.target.value)} onBlur={() => touch("remaining_amount")} placeholder="180 000" className={cls("remaining_amount")} />
             </Field>
-            <Field label="Щомісячний платіж" error={touched.monthly_payment ? errs.monthly_payment : undefined}>
+            <Field label="Щомісячний платіж" required error={touched.monthly_payment ? errs.monthly_payment : undefined}>
               <input type="number" value={f.monthly_payment} onChange={e => upd("monthly_payment", e.target.value)} onBlur={() => touch("monthly_payment")} placeholder="9 800" className={cls("monthly_payment")} />
             </Field>
             <Field label="День платежу" error={touched.payment_day ? errs.payment_day : undefined}>
@@ -367,17 +380,17 @@ function CreditModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved:
         </div>
       </Field>
 
-      {/* Дати */}
-      <div className={`grid gap-3 ${!isInstall ? "grid-cols-2" : "grid-cols-1"}`}>
-        <Field label="Дата відкриття">
-          <input type="date" value={f.start_date} onChange={e => upd("start_date", e.target.value)} className={inp} />
-        </Field>
-        {!isInstall && (
-          <Field label="Дата закриття">
-            <input type="date" value={f.end_date} onChange={e => upd("end_date", e.target.value)} className={inp} />
+      {/* Дати — для non-installment */}
+      {!isInstall && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Дата відкриття" required error={touched.start_date ? errs.start_date : undefined}>
+            <input type="date" value={f.start_date} onChange={e => upd("start_date", e.target.value)} onBlur={() => touch("start_date")} className={cls("start_date")} />
           </Field>
-        )}
-      </div>
+          <Field label="Дата закриття" required={needsEndDate} error={touched.end_date ? errs.end_date : undefined}>
+            <input type="date" value={f.end_date} onChange={e => upd("end_date", e.target.value)} onBlur={() => touch("end_date")} className={cls("end_date")} />
+          </Field>
+        </div>
+      )}
 
       <Button onClick={save} loading={saving} fullWidth>
         {edit ? "Зберегти зміни" : "Додати"}
@@ -406,21 +419,24 @@ function DepositModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved
   const touch = (k: string) => setTouched(p => ({ ...p, [k]: true }));
 
   const errs: Record<string, string> = {};
-  if (!f.name.trim()) errs.name = "Обов'язкове поле";
-  if (!f.amount || +f.amount <= 0) errs.amount = "Вкажіть суму";
+  if (!f.name.trim())                           errs.name          = "Обов'язкове поле";
+  if (!f.amount || +f.amount <= 0)              errs.amount        = "Вкажіть суму";
   if (!f.interest_rate || +f.interest_rate <= 0) errs.interest_rate = "Вкажіть ставку";
+  if (!f.start_date)                            errs.start_date    = "Вкажіть дату відкриття";
+  if (!f.end_date)                              errs.end_date      = "Вкажіть дату закриття";
+  if (f.start_date && f.end_date && f.end_date <= f.start_date) errs.end_date = "Має бути після дати відкриття";
 
   const cls = (k: string) => touched[k] && errs[k] ? inpErr : inp;
 
   const months = f.end_date && f.start_date
     ? Math.max(0, (new Date(f.end_date).getFullYear() - new Date(f.start_date).getFullYear()) * 12
         + new Date(f.end_date).getMonth() - new Date(f.start_date).getMonth()) : 0;
-  const preview = f.amount && f.interest_rate
+  const preview = f.amount && f.interest_rate && months > 0
     ? (cap ? +f.amount * (Math.pow(1 + +f.interest_rate / 100 / 12, months) - 1)
            : +f.amount * (+f.interest_rate / 100) * (months / 12)) : 0;
 
   async function save() {
-    const req = ["name", "amount", "interest_rate"];
+    const req = ["name", "amount", "interest_rate", "start_date", "end_date"];
     setTouched(Object.fromEntries(req.map(k => [k, true])));
     if (req.some(k => errs[k])) return;
     setSaving(true);
@@ -453,11 +469,11 @@ function DepositModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved
         <Field label="% ставка річна" required error={touched.interest_rate ? errs.interest_rate : undefined}>
           <input type="number" value={f.interest_rate} onChange={e => upd("interest_rate", e.target.value)} onBlur={() => touch("interest_rate")} placeholder="14.5" className={cls("interest_rate")} />
         </Field>
-        <Field label="Дата відкриття">
-          <input type="date" value={f.start_date} onChange={e => upd("start_date", e.target.value)} className={inp} />
+        <Field label="Дата відкриття" required error={touched.start_date ? errs.start_date : undefined}>
+          <input type="date" value={f.start_date} onChange={e => upd("start_date", e.target.value)} onBlur={() => touch("start_date")} className={cls("start_date")} />
         </Field>
-        <Field label="Дата закриття">
-          <input type="date" value={f.end_date} onChange={e => upd("end_date", e.target.value)} className={inp} />
+        <Field label="Дата закриття" required error={touched.end_date ? errs.end_date : undefined}>
+          <input type="date" value={f.end_date} onChange={e => upd("end_date", e.target.value)} onBlur={() => touch("end_date")} className={cls("end_date")} />
         </Field>
       </div>
 
