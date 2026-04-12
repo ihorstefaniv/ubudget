@@ -13,12 +13,12 @@ interface Credit { id: string; remaining_amount: number; monthly_payment: number
 interface Deposit { id: string; amount: number; currency: string; }
 interface Stock { id: string; quantity: number; current_price: number; currency: string; }
 interface Bond { id: string; amount: number; currency: string; }
-interface RealEstate { id: string; current_price: number; currency: string; }
-interface Collection { id: string; expected_price: number; currency: string; }
+interface RealEstate { id: string; current_price: number; }
+interface BusinessItem { id: string; business_id: string; section: string; amount: number; }
+interface Collection { id: string; expected_price: number; currency: string; status: string; }
 
 const USD_RATE = 41.5;
-const EUR_RATE = 44.8;
-function toUAH(n: number, cur: string) { return n * (cur === "USD" ? USD_RATE : cur === "EUR" ? EUR_RATE : 1); }
+function toUAH(n: number, cur: string) { return n * (cur === "USD" ? USD_RATE : cur === "EUR" ? USD_RATE * 1.08 : 1); }
 
 // ─── Helpers ──────────────────────────────────────────────────
 function fmt(n: number, cur = "UAH") {
@@ -97,10 +97,11 @@ export default function DashboardPage() {
   const [credits, setCredits]         = useState<Credit[]>([]);
   const [deposits, setDeposits]       = useState<Deposit[]>([]);
   const [budgetPlan, setBudgetPlan]   = useState(0);
-  const [stocks, setStocks]           = useState<Stock[]>([]);
-  const [bonds, setBonds]             = useState<Bond[]>([]);
-  const [realEstate, setRealEstate]   = useState<RealEstate[]>([]);
-  const [collections, setCollections] = useState<Collection[]>([]);
+  const [stocks, setStocks]             = useState<Stock[]>([]);
+  const [bonds, setBonds]               = useState<Bond[]>([]);
+  const [realEstate, setRealEstate]     = useState<RealEstate[]>([]);
+  const [businessItems, setBusinessItems] = useState<BusinessItem[]>([]);
+  const [collections, setCollections]   = useState<Collection[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,7 +117,7 @@ export default function DashboardPage() {
 
     const [
       { data: accs }, { data: txData }, { data: cr }, { data: dep }, { data: budgets },
-      { data: stks }, { data: bnd }, { data: re }, { data: col },
+      { data: stks }, { data: bnd }, { data: re }, { data: bi }, { data: col },
     ] = await Promise.all([
       supabase.from("accounts").select("id,name,type,balance,currency,icon").eq("user_id", user.id).eq("is_archived", false).order("balance", { ascending: false }),
       supabase.from("transactions").select("id,type,amount,note,transaction_date,category_key")
@@ -127,8 +128,9 @@ export default function DashboardPage() {
       supabase.from("budgets").select("plan_amount").eq("user_id", user.id).eq("month", m).eq("year", y),
       supabase.from("stocks").select("id,quantity,current_price,currency").eq("user_id", user.id),
       supabase.from("bonds").select("id,amount,currency").eq("user_id", user.id),
-      supabase.from("real_estate").select("id,current_price,currency").eq("user_id", user.id),
-      supabase.from("collections").select("id,expected_price,currency").eq("user_id", user.id),
+      supabase.from("real_estate").select("id,current_price").eq("user_id", user.id),
+      supabase.from("business_items").select("id,business_id,section,amount").eq("user_id", user.id),
+      supabase.from("collections").select("id,expected_price,currency,status").eq("user_id", user.id),
     ]);
 
     setAccounts(accs ?? []);
@@ -139,6 +141,7 @@ export default function DashboardPage() {
     setStocks(stks ?? []);
     setBonds(bnd ?? []);
     setRealEstate(re ?? []);
+    setBusinessItems(bi ?? []);
     setCollections(col ?? []);
     setLoading(false);
   }, []);
@@ -158,8 +161,9 @@ export default function DashboardPage() {
   const totalInvestments =
     stocks.reduce((s, st) => s + toUAH(Number(st.quantity) * Number(st.current_price), st.currency), 0) +
     bonds.reduce((s, b) => s + toUAH(Number(b.amount), b.currency), 0) +
-    realEstate.reduce((s, r) => s + toUAH(Number(r.current_price), r.currency), 0) +
-    collections.reduce((s, c) => s + toUAH(Number(c.expected_price), c.currency), 0);
+    realEstate.reduce((s, r) => s + Number(r.current_price), 0) +
+    businessItems.filter(i => i.section === "asset").reduce((s, i) => s + Number(i.amount), 0) +
+    collections.filter(c => c.status === "owned").reduce((s, c) => s + toUAH(Number(c.expected_price), c.currency), 0);
 
   const netWorth =
     uahAccounts.reduce((s, a) => s + Number(a.balance), 0) +
