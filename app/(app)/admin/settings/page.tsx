@@ -4,6 +4,8 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/auth";
+import { useAdminRole, } from "../layout";
+import { isSuperAdmin } from "@/lib/permissions";
 
 const Icon = ({ d, cls = "w-4 h-4" }: { d: string; cls?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={cls}>
@@ -93,22 +95,18 @@ const FEATURES = [
 ] as const;
 
 export default function AdminSettingsPage() {
+  const role = useAdminRole();
+
   const [settings, setSettings] = useState<Settings>(DEFAULTS);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
   const [tgTest, setTgTest]     = useState<"idle" | "loading" | "ok" | "error">("idle");
-  const [myRole, setMyRole]     = useState("");
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: p } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-      setMyRole(p?.role ?? "admin");
-    }
     const { data } = await supabase.from("site_settings").select("key, value");
     if (data) {
       const map = Object.fromEntries(data.map((r: { key: string; value: string }) => [r.key, r.value]));
@@ -151,7 +149,7 @@ export default function AdminSettingsPage() {
     setSettings(s => ({ ...s, [key]: val }));
   }
 
-  const isSuperadmin = myRole === "superadmin";
+  const isSuperadmin = isSuperAdmin(role);
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" /></div>;
 
