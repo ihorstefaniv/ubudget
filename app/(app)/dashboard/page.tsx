@@ -375,21 +375,21 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {income > 0 && (
+        {(income > 0 || expenses > 0) && (
           <div className="flex gap-3 items-end h-16">
             {[
               { label: "Дох", val: income,   max: Math.max(income, expenses), color: "bg-green-400" },
               { label: "Вит", val: expenses, max: Math.max(income, expenses), color: "bg-red-400"   },
+              { label: `за ${periodLabel[period]}`, val: 0, max: 1, color: "" },
             ].map(({ label, val, max, color }) => (
               <div key={label} className="flex flex-col items-center gap-1 flex-1">
                 <div className="w-full flex items-end justify-center" style={{ height: 48 }}>
-                  <div className={`w-full rounded-t-lg ${color} opacity-80`}
-                    style={{ height: `${Math.min((val / (max || 1)) * 100, 100)}%` }} />
+                  {color && <div className={`w-full rounded-t-lg ${color} opacity-80`}
+                    style={{ height: `${Math.min((val / (max || 1)) * 100, 100)}%` }} />}
                 </div>
-                <span className="text-[10px] text-neutral-400">{label}</span>
+                <span className="text-[10px] text-neutral-400 text-center">{label}</span>
               </div>
             ))}
-            <p className="text-xs text-neutral-400 self-center flex-1 text-center">за {periodLabel[period]}</p>
           </div>
         )}
       </Card>
