@@ -114,6 +114,7 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
   async function handleSubmit() {
     if (!amount || isNaN(+amount) || +amount <= 0) { setError("Введіть суму"); return; }
     if (type !== "transfer" && !category)           { setError("Оберіть категорію"); return; }
+    if (!accountId)                                 { setError("Оберіть рахунок"); return; }
     setSaving(true);
     try {
       await onSave({
@@ -121,7 +122,7 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
         amount: +amount,
         currency,
         category_key: type === "transfer" ? "transfer" : category,
-        account_id:   accountId || null,
+        account_id:   accountId || null, // null тільки якщо рахунків нема взагалі
         transaction_date: date,
         note,
         receipt_url:  photo,
@@ -216,17 +217,30 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
             </div>
           )}
 
-          {/* Рахунок */}
-          {accounts.length > 0 && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Рахунок</label>
+          {/* Рахунок — обов'язковий */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+              Рахунок <span className="text-red-400">*</span>
+            </label>
+            {accounts.length === 0 ? (
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
+                <span className="text-amber-500 text-lg shrink-0">⚠️</span>
+                <div>
+                  <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">Немає рахунків</p>
+                  <a href="/accounts" className="text-xs text-amber-600 dark:text-amber-500 underline underline-offset-2">
+                    Додати рахунок →
+                  </a>
+                </div>
+              </div>
+            ) : (
               <select value={accountId} onChange={e => setAccountId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
-                <option value="">— Без рахунку —</option>
+                className={`w-full px-3 py-2.5 rounded-xl border bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all ${
+                  !accountId ? "border-red-300 dark:border-red-700" : "border-neutral-200 dark:border-neutral-700"
+                }`}>
                 {accounts.map(a => <option key={a.id} value={a.id}>{a.icon ? `${a.icon} ` : ""}{a.name}</option>)}
               </select>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Дата + нотатка */}
           <div className="grid grid-cols-2 gap-3">
