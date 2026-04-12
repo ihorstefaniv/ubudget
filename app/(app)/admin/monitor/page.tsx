@@ -2,6 +2,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useAdminRole } from "../layout";
+import { can } from "@/lib/permissions";
 
 import { fetchLogs, addLog, fetchHealth, fetchPings, type LogEntry, type HealthResult, type PingResult } from "../actions/monitor";
 
@@ -79,6 +82,16 @@ function Pill({ label, ok, value, ms }: { label: string; ok: boolean; value?: st
 
 // ─── Page ─────────────────────────────────────────────────────
 export default function MonitorPage() {
+  const role   = useAdminRole();
+  const router = useRouter();
+
+  // Superadmin only — редіректимо одразу, ще до рендеру контенту
+  useEffect(() => {
+    if (!can(role, "viewMonitor")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [role, router]);
+
   const [logs, setLogs]     = useState<LogEntry[]>([]);
   const [health, setHealth] = useState<HealthResult | null>(null);
   const [pings, setPings]   = useState<PingResult[]>([]);

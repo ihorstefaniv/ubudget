@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isAtLeastAdmin } from "@/lib/permissions";
 
 const PUBLIC_PREFIXES = [
   "/",
@@ -17,6 +18,9 @@ const PUBLIC_PREFIXES = [
   "/api/geocode",
   "/api/route",
 ];
+
+// Admin login page — доступна без ролі (щоб адмін міг залогінитись)
+const ADMIN_AUTH_PATHS = ["/admin-login"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((prefix) =>
@@ -48,20 +52,36 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { data: { user } } = await supabase.auth.getUser();
   const pathname = request.nextUrl.pathname;
 
-  // Незалогінений → редірект на /login (крім публічних шляхів)
-  if (!user && !isPublicPath(pathname)) {
+  // ── Незалогінений → /login (крім публічних та admin-login) ──
+  if (!user && !isPublicPath(pathname) && !ADMIN_AUTH_PATHS.includes(pathname)) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Залогінений намагається зайти на /login або /register → редірект на /dashboard
+  // ── Залогінений на /login або /register → /dashboard ────────
   if (user && (pathname === "/login" || pathname === "/register")) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // ── /admin/* — потрібна роль admin або superadmin ────────────
+  if (pathname.startsWith("/admin") && !ADMIN_AUTH_PATHS.includes(pathname)) {
+    if (!user) {
+      return NextResponse.redirect(new URL("/admin-login", request.url));
+    }
+
+    // Запитуємо роль з profiles (тільки для /admin шляхів)
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!isAtLeastAdmin(profile?.role)) {
+      // Залогінений юзер без прав адміна → на головну
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
   }
 
   return supabaseResponse;

@@ -4,6 +4,8 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/auth";
 import { getUsersWithEmails } from "../actions/admin-users";
+import { useAdminRole } from "../layout";
+import { can } from "@/lib/permissions";
 
 interface UserRow { id: string; full_name: string | null; email: string; role: string; created_at: string; updated_at: string; }
 type StatusKey = "all" | "new" | "active" | "loyal" | "inactive" | "blocked";
@@ -239,13 +241,14 @@ function UserDrawer({ user, onClose, onUpdate, isSuperadmin }: {
 
 // ─── Page ─────────────────────────────────────────────────────
 export default function AdminUsersPage() {
+  const role = useAdminRole();
+
   const [users, setUsers]           = useState<UserRow[]>([]);
   const [loading, setLoading]       = useState(true);
   const [loadErr, setLoadErr]       = useState("");
   const [filter, setFilter]         = useState<StatusKey>("all");
   const [search, setSearch]         = useState("");
   const [selected, setSelected]     = useState<UserRow | null>(null);
-  const [myRole, setMyRole]         = useState("");
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => { load(); }, []);
@@ -256,9 +259,6 @@ export default function AdminUsersPage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { data: myProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-      setMyRole(myProfile?.role ?? "admin");
 
       const [{ data: profiles, error: pErr }, authUsers] = await Promise.all([
         supabase.from("profiles").select("id, full_name, role, created_at, updated_at").order("created_at", { ascending: false }),
@@ -288,7 +288,7 @@ export default function AdminUsersPage() {
     a.download = "users.csv"; a.click();
   }
 
-  const isSuperadmin = myRole === "superadmin";
+  const isSuperadmin = can(role, "assignRoles");
 
   const counts: Record<StatusKey, number> = {
     all:      users.length,
@@ -328,10 +328,12 @@ export default function AdminUsersPage() {
                 <Icon d={ic.export} />Export .csv
               </button>
             )}
-            <button onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 active:scale-95 transition-all">
-              <Icon d={ic.plus} />Додати
-            </button>
+            {can(role, "createUser") && (
+              <button onClick={() => setShowCreate(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 active:scale-95 transition-all">
+                <Icon d={ic.plus} />Додати
+              </button>
+            )}
           </div>
         </div>
 

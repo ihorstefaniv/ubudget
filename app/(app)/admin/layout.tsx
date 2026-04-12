@@ -1,10 +1,21 @@
 // ФАЙЛ: app/(admin)/layout.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/auth";
+import { type Role, can } from "@/lib/permissions";
+
+// ─── Role Context ─────────────────────────────────────────────
+// Дає доступ до ролі поточного адміна в будь-якому дочірньому компоненті.
+
+const AdminRoleContext = createContext<Role>("admin");
+
+/** Хук для отримання ролі поточного адміна з контексту layout-у. */
+export function useAdminRole(): Role {
+  return useContext(AdminRoleContext);
+}
 
 const Icon = ({ d, cls = "w-5 h-5" }: { d: string; cls?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={cls}>
@@ -34,9 +45,9 @@ const NAV_MAIN = [
 ];
 
 const NAV_BOTTOM = [
-  { href: "/admin/monitor",  label: "Моніторинг",    icon: "live"     },
-  { href: "/admin/settings", label: "Налаштування", icon: "settings" },
-  { href: "/admin/docs",     label: "Документація", icon: "docs"     },
+  { href: "/admin/monitor",  label: "Моніторинг",    icon: "live",     superadminOnly: true },
+  { href: "/admin/settings", label: "Налаштування", icon: "settings", superadminOnly: false },
+  { href: "/admin/docs",     label: "Документація", icon: "docs",     superadminOnly: false },
 ];
 
 function NavItem({ href, label, icon, active, badge, onClose }: {
@@ -55,7 +66,7 @@ function NavItem({ href, label, icon, active, badge, onClose }: {
 }
 
 function Sidebar({ pathname, userName, role, onClose, ticketsCount }: {
-  pathname: string; userName: string; role: string; onClose?: () => void; ticketsCount: number;
+  pathname: string; userName: string; role: Role; onClose?: () => void; ticketsCount: number;
 }) {
   const router = useRouter();
 
@@ -97,7 +108,7 @@ function Sidebar({ pathname, userName, role, onClose, ticketsCount }: {
 
       {/* Bottom nav */}
       <div className="px-3 pb-2 space-y-0.5 border-t border-white/10 pt-3">
-        {NAV_BOTTOM.map(({ href, label, icon }) => (
+        {NAV_BOTTOM.filter(item => !item.superadminOnly || can(role, "viewMonitor")).map(({ href, label, icon }) => (
           <NavItem key={href} href={href} label={label} icon={icon}
             active={pathname.startsWith(href)} onClose={onClose} />
         ))}
@@ -136,7 +147,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [ready, setReady]           = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userName, setUserName]     = useState("");
-  const [role, setRole]             = useState("");
+  const [role, setRole]             = useState<Role>("admin");
   const [ticketsCount, setTicketsCount] = useState(0);
 
   useEffect(() => {
@@ -156,7 +167,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         .from("tickets").select("*", { count: "exact", head: true }).eq("status", "new");
 
       setUserName(profile.full_name || data.user.email?.split("@")[0] || "Admin");
-      setRole(profile.role);
+      setRole(profile.role as Role);
       setTicketsCount(count ?? 0);
       setReady(true);
     });
@@ -171,37 +182,39 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 
   return (
-    <div className="min-h-screen bg-neutral-100 flex">
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-56 shrink-0 fixed inset-y-0 left-0 z-30">
-        <Sidebar pathname={pathname} userName={userName} role={role} ticketsCount={ticketsCount} />
-      </aside>
+    <AdminRoleContext.Provider value={role}>
+      <div className="min-h-screen bg-neutral-100 flex">
+        {/* Desktop sidebar */}
+        <aside className="hidden lg:flex flex-col w-56 shrink-0 fixed inset-y-0 left-0 z-30">
+          <Sidebar pathname={pathname} userName={userName} role={role} ticketsCount={ticketsCount} />
+        </aside>
 
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
-      )}
+        {/* Mobile overlay */}
+        {mobileOpen && (
+          <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
+        )}
 
-      {/* Mobile sidebar */}
-      <aside className={`fixed inset-y-0 left-0 w-64 z-50 lg:hidden transform transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <Sidebar pathname={pathname} userName={userName} role={role} ticketsCount={ticketsCount} onClose={() => setMobileOpen(false)} />
-      </aside>
+        {/* Mobile sidebar */}
+        <aside className={`fixed inset-y-0 left-0 w-64 z-50 lg:hidden transform transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+          <Sidebar pathname={pathname} userName={userName} role={role} ticketsCount={ticketsCount} onClose={() => setMobileOpen(false)} />
+        </aside>
 
-      {/* Main */}
-      <div className="flex-1 lg:ml-56 flex flex-col min-h-screen">
-        <header className="lg:hidden h-12 bg-neutral-950 flex items-center justify-between px-4 shrink-0">
-          <button onClick={() => setMobileOpen(true)} className="text-white/60 hover:text-white">
-            <Icon d={ic.menu} cls="w-5 h-5" />
-          </button>
-          <span className="text-sm font-bold text-white">
-            <span className="text-orange-400">U</span>budget Admin
-          </span>
-          <div className="w-5" />
-        </header>
-        <main className="flex-1 p-5 lg:p-8 overflow-x-hidden">
-          {children}
-        </main>
+        {/* Main */}
+        <div className="flex-1 lg:ml-56 flex flex-col min-h-screen">
+          <header className="lg:hidden h-12 bg-neutral-950 flex items-center justify-between px-4 shrink-0">
+            <button onClick={() => setMobileOpen(true)} className="text-white/60 hover:text-white">
+              <Icon d={ic.menu} cls="w-5 h-5" />
+            </button>
+            <span className="text-sm font-bold text-white">
+              <span className="text-orange-400">U</span>budget Admin
+            </span>
+            <div className="w-5" />
+          </header>
+          <main className="flex-1 p-5 lg:p-8 overflow-x-hidden">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </AdminRoleContext.Provider>
   );
 }
