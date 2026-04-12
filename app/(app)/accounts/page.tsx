@@ -51,7 +51,7 @@ interface Credit {
   id: string;
   name: string;
   type: string;
-  lender?: string | null;
+  bank?: string | null;
   total_amount?: number | null;
   remaining_amount: number;
   monthly_payment?: number | null;
@@ -67,6 +67,15 @@ interface Deposit {
   currency: string;
   interest_rate?: number | null;
   end_date?: string | null;
+}
+
+interface InvestmentCollection {
+  id: string;
+  name: string;
+  category: string;
+  expected_price: number;
+  currency: string;
+  status: string;
 }
 
 type ModalType = AccType | null;
@@ -442,29 +451,33 @@ export default function AccountsPage() {
   const [modal, setModal]             = useState<ModalType>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
-  const [accounts, setAccounts]   = useState<Account[]>([]);
-  const [credits, setCredits]     = useState<Credit[]>([]);
-  const [deposits, setDeposits]   = useState<Deposit[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [rates, setRates]         = useState<Rates>(FALLBACK_RATES);
+  const [accounts, setAccounts]         = useState<Account[]>([]);
+  const [credits, setCredits]           = useState<Credit[]>([]);
+  const [deposits, setDeposits]         = useState<Deposit[]>([]);
+  const [invCollections, setInvCollections] = useState<InvestmentCollection[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [rates, setRates]               = useState<Rates>(FALLBACK_RATES);
 
   const load = useCallback(async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const [{ data: accs }, { data: cr }, { data: dep }] = await Promise.all([
+    const [{ data: accs }, { data: cr }, { data: dep }, { data: col }] = await Promise.all([
       supabase.from("accounts").select("id,name,type,balance,currency,icon,is_archived")
-        .eq("user_id", user.id).eq("is_archived", false).order("created_at"),
-      supabase.from("credits").select("id,name,type,lender,total_amount,remaining_amount,monthly_payment,payment_day,currency")
-        .eq("user_id", user.id).eq("is_archived", false).order("created_at"),
+        .eq("user_id", user.id).neq("is_archived", true).order("created_at"),
+      supabase.from("credits").select("id,name,type,bank,total_amount,remaining_amount,monthly_payment,payment_day,currency")
+        .eq("user_id", user.id).neq("is_archived", true).order("created_at"),
       supabase.from("deposits").select("id,name,bank,amount,currency,interest_rate,end_date")
-        .eq("user_id", user.id).eq("is_archived", false).order("created_at"),
+        .eq("user_id", user.id).neq("is_archived", true).order("created_at"),
+      supabase.from("collections").select("id,name,category,expected_price,currency,status")
+        .eq("user_id", user.id).eq("status", "owned"),
     ]);
 
     setAccounts(accs ?? []);
     setCredits(cr ?? []);
     setDeposits(dep ?? []);
+    setInvCollections(col ?? []);
     setLoading(false);
   }, []);
 
@@ -494,7 +507,9 @@ export default function AccountsPage() {
   const totalCash        = sumUAH(cashAccs);
   const totalBanking     = sumUAH(bankingAccs);
   const totalCrypto      = sumUAH(cryptoAccs);
-  const totalCollections = sumUAH(collectionAccs);
+  // Колекції = прості рахунки + з інвестицій
+  const totalCollections = sumUAH(collectionAccs) +
+    invCollections.reduce((s, c) => s + toUAH(Number(c.expected_price), c.currency), 0);
   const totalProperty    = sumUAH(propertyAccs);
 
   const totalCredits  = credits.reduce((s, c) => s + toUAH(Number(c.remaining_amount), c.currency ?? "UAH"), 0);
@@ -591,7 +606,7 @@ export default function AccountsPage() {
         ))}
         {deposits.length > 0 && (
           <Link href="/credits?tab=deposits"
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 text-sm hover:border-orange-300 hover:text-orange-400 transition-all">
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 text-orange-500 text-sm font-medium hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-all">
             <Icon d={icons.plus} className="w-4 h-4" />
             Додати депозит
           </Link>
@@ -610,13 +625,13 @@ export default function AccountsPage() {
         ) : credits.filter(c => ["consumer", "car", "credit_card"].includes(c.type)).map(c => (
           <AccountCard key={c.id}
             name={c.name}
-            sub={[CREDIT_TYPE_LABELS[c.type], c.lender, c.monthly_payment ? `${fmt(c.monthly_payment)}/міс` : null].filter(Boolean).join(" · ")}
+            sub={[CREDIT_TYPE_LABELS[c.type], c.bank, c.monthly_payment ? `${fmt(c.monthly_payment)}/міс` : null].filter(Boolean).join(" · ")}
             balance={-Number(c.remaining_amount)} currency={c.currency ?? "UAH"}
             badge="📋" onDelete={() => {}} />
         ))}
         {credits.filter(c => ["consumer", "car", "credit_card"].includes(c.type)).length > 0 && (
           <Link href="/credits"
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-500 text-sm hover:border-orange-300 hover:text-orange-400 transition-all">
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 text-orange-500 text-sm font-medium hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-all">
             <Icon d={icons.plus} className="w-4 h-4" />
             Додати кредит
           </Link>
@@ -633,7 +648,7 @@ export default function AccountsPage() {
         ) : credits.filter(c => ["installment", "partpay"].includes(c.type)).map(c => (
           <AccountCard key={c.id}
             name={c.name}
-            sub={[c.lender, c.monthly_payment ? `${fmt(c.monthly_payment)}/міс` : null].filter(Boolean).join(" · ")}
+            sub={[c.bank, c.monthly_payment ? `${fmt(c.monthly_payment)}/міс` : null].filter(Boolean).join(" · ")}
             balance={-Number(c.remaining_amount)} currency={c.currency ?? "UAH"}
             badge="📱" onDelete={() => {}} />
         ))}
@@ -649,7 +664,7 @@ export default function AccountsPage() {
         ) : credits.filter(c => c.type === "mortgage").map(c => (
           <AccountCard key={c.id}
             name={c.name}
-            sub={[c.lender, c.monthly_payment ? `${fmt(c.monthly_payment)}/міс` : null].filter(Boolean).join(" · ")}
+            sub={[c.bank, c.monthly_payment ? `${fmt(c.monthly_payment)}/міс` : null].filter(Boolean).join(" · ")}
             balance={-Number(c.remaining_amount)} currency={c.currency ?? "UAH"}
             badge="🏠" onDelete={() => {}} />
         ))}
@@ -667,16 +682,35 @@ export default function AccountsPage() {
         ))}
       </Section>
 
-      {/* ── Колекції ── */}
-      <Section title="🎨 Колекції" total={totalCollections} onAdd={() => setModal("collections")} defaultOpen={false} manageHref="/investments">
-        {collectionAccs.length === 0 ? (
-          <p className="text-xs text-neutral-400 text-center py-2">Немає колекційних активів</p>
-        ) : collectionAccs.map(a => (
-          <AccountCard key={a.id} name={a.name}
-            sub={a.currency}
-            balance={Number(a.balance)} currency={a.currency}
-            badge={a.icon ?? "🎨"} onDelete={() => setDeleteTarget({ id: a.id, name: a.name })} />
-        ))}
+      {/* ── Колекції (accounts + investments) ── */}
+      <Section title="🎨 Колекції" total={totalCollections} defaultOpen={false} manageHref="/investments">
+        {collectionAccs.length === 0 && invCollections.length === 0 ? (
+          <div className="text-center py-2">
+            <p className="text-xs text-neutral-400 mb-2">Немає колекційних активів</p>
+            <Link href="/investments" className="text-xs text-orange-400 hover:text-orange-500 font-medium">
+              Додати в Інвестиції →
+            </Link>
+          </div>
+        ) : (
+          <>
+            {collectionAccs.map(a => (
+              <AccountCard key={a.id} name={a.name} sub={a.currency}
+                balance={Number(a.balance)} currency={a.currency}
+                badge={a.icon ?? "🎨"} onDelete={() => setDeleteTarget({ id: a.id, name: a.name })} />
+            ))}
+            {invCollections.map(c => (
+              <AccountCard key={c.id} name={c.name}
+                sub={[c.category, c.currency !== "UAH" ? c.currency : null].filter(Boolean).join(" · ")}
+                balance={toUAH(Number(c.expected_price), c.currency)} currency="UAH"
+                badge="🎨" onDelete={() => {}} />
+            ))}
+          </>
+        )}
+        <Link href="/investments"
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 text-orange-500 text-sm font-medium hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-all">
+          <Icon d={icons.plus} className="w-4 h-4" />
+          Управляти колекціями
+        </Link>
       </Section>
 
       {/* ── Модалки ── */}
