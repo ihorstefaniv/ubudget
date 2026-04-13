@@ -471,6 +471,14 @@ const DEFAULT_CATEGORIES: {
     subs: [] },
 ];
 
+// Всі можливі txKey в системі = TX_CATEGORIES id
+const ALL_TX_KEYS = new Set([...TX_CATEGORIES.expense, ...TX_CATEGORIES.income].map(c => c.id));
+
+// Маппінг txKey → назву/іконку/тип з TX_CATEGORIES
+const TX_META: Record<string, { label: string; emoji: string; isIncome: boolean }> = {};
+TX_CATEGORIES.expense.forEach(c => { TX_META[c.id] = { label: c.label, emoji: c.emoji, isIncome: false }; });
+TX_CATEGORIES.income.forEach(c => { TX_META[c.id] = { label: c.label, emoji: c.emoji, isIncome: true }; });
+
 function CategoriesTab({ categories, onReload }: { categories: Category[]; onReload: () => void }) {
   const supabase = createClient();
   const [editingId, setEditingId]         = useState<string | null>(null);
@@ -480,7 +488,9 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
   const [addMerchantId, setAddMerchantId] = useState<string | null>(null);
   const [customMerchant, setCustomMerchant] = useState("");
   const [addCatOpen, setAddCatOpen]       = useState(false);
-  const [newCat, setNewCat]               = useState({ name: "", icon: "📦", type: "variable" as CategoryType });
+  const [saving, setSaving]               = useState(false);
+  // newCat: txKey = один з TX_CATEGORIES id (або "" для кастомної)
+  const [newCat, setNewCat]               = useState({ name: "", icon: "📦", type: "variable" as CategoryType, txKey: "" });
 
   const inp = "px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm focus:outline-none focus:border-orange-300 transition-all";
 
@@ -493,25 +503,44 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
     onReload();
   }
   async function addCategory() {
-    if (!newCat.name) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data: cat } = await supabase.from("categories").insert({
-      user_id: user.id, name: newCat.name, icon: newCat.icon,
-      type: newCat.type, color: "neutral", sort_order: categories.length,
-    }).select().single();
-    const presetKey = newCat.name.toLowerCase().includes("продукт") ? "food"
-      : newCat.name.toLowerCase().includes("кафе") ? "cafe"
-      : newCat.name.toLowerCase().includes("пальн") ? "fuel" : null;
-    if (cat && presetKey && MERCHANT_PRESETS[presetKey]) {
-      await supabase.from("merchants").insert(MERCHANT_PRESETS[presetKey].map(m => ({
-        user_id: user.id, category_id: cat.id, name: m.name,
-        has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
-        bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
-      })));
+    if (!newCat.name.trim()) return;
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Визначити txKey: явний вибір або автодетект по назві
+      let txKey = newCat.txKey;
+      if (!txKey) {
+        const n = newCat.name.toLowerCase();
+        const match = [...TX_CATEGORIES.expense, ...TX_CATEGORIES.income].find(c => c.label.toLowerCase() === n);
+        txKey = match?.id ?? "";
+      }
+
+      const { data: cat, error } = await supabase.from("categories").insert({
+        user_id: user.id, name: newCat.name.trim(), icon: newCat.icon,
+        type: newCat.type, color: txKey || "custom", sort_order: categories.length,
+      }).select().single();
+
+      if (error) { console.error("addCategory error:", error); return; }
+
+      // Завантажити preset merchants якщо є відповідний txKey
+      if (cat && txKey && MERCHANT_PRESETS[txKey]) {
+        await supabase.from("merchants").insert(
+          MERCHANT_PRESETS[txKey].map(m => ({
+            category_id: cat.id, name: m.name,
+            has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
+            bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
+          }))
+        );
+      }
+
+      setNewCat({ name: "", icon: "📦", type: "variable", txKey: "" });
+      setAddCatOpen(false);
+      onReload();
+    } finally {
+      setSaving(false);
     }
-    setNewCat({ name: "", icon: "📦", type: "variable" }); setAddCatOpen(false);
-    onReload();
   }
   async function toggleMerchant(mId: string, current: boolean) {
     await supabase.from("merchants").update({ is_selected: !current }).eq("id", mId);
@@ -560,6 +589,43 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
       {addCatOpen && (
         <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 rounded-2xl p-4 space-y-3">
           <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">Нова категорія</p>
+
+          {/* Крок 1: вибрати з TX_CATEGORIES (прив'язка до транзакцій) */}
+          <div>
+            <p className="text-xs text-neutral-500 mb-2">Оберіть категорію транзакцій або залиште порожнім для кастомної:</p>
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">Витрати</p>
+              <div className="flex flex-wrap gap-1.5">
+                {TX_CATEGORIES.expense.map(c => (
+                  <button key={c.id} onClick={() => setNewCat(p => ({
+                    ...p, txKey: p.txKey === c.id ? "" : c.id,
+                    name: p.txKey === c.id ? "" : (p.name || c.label),
+                    icon: p.txKey === c.id ? "📦" : (p.icon === "📦" ? c.emoji : p.icon),
+                    type: "variable",
+                  }))}
+                    className={`text-xs px-2.5 py-1.5 rounded-xl border font-medium transition-all ${newCat.txKey === c.id ? "border-orange-300 bg-orange-100 dark:bg-orange-950/30 text-orange-600" : "border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300"}`}>
+                    {c.emoji} {c.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide mt-2">Доходи</p>
+              <div className="flex flex-wrap gap-1.5">
+                {TX_CATEGORIES.income.map(c => (
+                  <button key={c.id} onClick={() => setNewCat(p => ({
+                    ...p, txKey: p.txKey === c.id ? "" : c.id,
+                    name: p.txKey === c.id ? "" : (p.name || c.label),
+                    icon: p.txKey === c.id ? "📦" : (p.icon === "📦" ? c.emoji : p.icon),
+                    type: "income",
+                  }))}
+                    className={`text-xs px-2.5 py-1.5 rounded-xl border font-medium transition-all ${newCat.txKey === c.id ? "border-green-300 bg-green-100 dark:bg-green-950/30 text-green-600" : "border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:border-neutral-300"}`}>
+                    {c.emoji} {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Крок 2: назва і тип */}
           <div className="flex gap-3 items-start">
             <EmojiPicker value={newCat.icon} onChange={e => setNewCat(p => ({ ...p, icon: e }))} />
             <input value={newCat.name} onChange={e => setNewCat(p => ({ ...p, name: e.target.value }))}
@@ -574,13 +640,19 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
               </button>
             ))}
           </div>
+          {newCat.txKey && (
+            <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+              ✓ Пов'язана з транзакцією-категорією: <strong>{TX_META[newCat.txKey]?.label}</strong>
+            </p>
+          )}
           <div className="flex gap-2">
-            <button onClick={() => setAddCatOpen(false)}
+            <button onClick={() => { setAddCatOpen(false); setNewCat({ name: "", icon: "📦", type: "variable", txKey: "" }); }}
               className="flex-1 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-500 text-sm">
               Скасувати
             </button>
-            <button onClick={addCategory}
-              className="flex-1 py-2 rounded-xl bg-orange-400 text-white text-sm font-bold hover:bg-orange-500">
+            <button onClick={addCategory} disabled={saving || !newCat.name.trim()}
+              className="flex-1 py-2 rounded-xl bg-orange-400 text-white text-sm font-bold hover:bg-orange-500 disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving && <Icon d={icons.loader} className="w-3.5 h-3.5 animate-spin" />}
               Додати
             </button>
           </div>
@@ -787,45 +859,44 @@ export default function BudgetPage() {
     })));
 
     // catKeyMap: category id → transaction category_key
-    // Стратегія (income: явний match по TX_CATEGORIES; expense: keyword fallback)
+    // Пріоритет: 1) color поле (явний txKey з seed/addCategory)
+    //            2) точний збіг назви з TX_CATEGORIES
+    //            3) keyword fallback
     const catKeyMap: Record<string, string> = {};
     cats?.forEach(c => {
+      // Рівень 1: color = txKey (зберігається в resetAndSeed та addCategory)
+      if (c.color && ALL_TX_KEYS.has(c.color)) {
+        catKeyMap[c.id] = c.color;
+        return;
+      }
+      // Рівень 2: точний збіг назви
       const n = c.name.toLowerCase().trim();
-
+      const allTc = [...TX_CATEGORIES.expense, ...TX_CATEGORIES.income];
+      const byLabel = allTc.find(tc => tc.label.toLowerCase() === n);
+      if (byLabel) { catKeyMap[c.id] = byLabel.id; return; }
+      // Рівень 3: keyword fallback (для категорій з довільними назвами)
       if (c.type === "income") {
-        // Income: шукаємо по точному збігу label або id в TX_CATEGORIES.income
-        const byLabel = TX_CATEGORIES.income.find(tc => tc.label.toLowerCase() === n);
-        if (byLabel) { catKeyMap[c.id] = byLabel.id; return; }
-        const byId    = TX_CATEGORIES.income.find(tc => tc.id === n || tc.id === c.color);
-        if (byId)    { catKeyMap[c.id] = byId.id; return; }
-        // Keyword fallback для income
-        if      (n.includes("зарплат") || n.includes("оклад") || n.includes("salary"))  catKeyMap[c.id] = "salary";
-        else if (n.includes("фріланс") || n.includes("підробіт"))                       catKeyMap[c.id] = "freelance";
-        else if (n.includes("бізнес") || n.includes("підприємс"))                       catKeyMap[c.id] = "business";
-        else if (n.includes("інвестиц") || n.includes("дивіденд"))                     catKeyMap[c.id] = "invest";
-        else if (n.includes("поверн"))                                                   catKeyMap[c.id] = "refund";
+        if      (n.includes("зарплат") || n.includes("оклад"))  catKeyMap[c.id] = "salary";
+        else if (n.includes("фріланс") || n.includes("підробіт")) catKeyMap[c.id] = "freelance";
+        else if (n.includes("бізнес"))  catKeyMap[c.id] = "business";
+        else if (n.includes("інвестиц")) catKeyMap[c.id] = "invest";
+        else if (n.includes("поверн"))  catKeyMap[c.id] = "refund";
         else catKeyMap[c.id] = "other_in";
         return;
       }
-
-      // Expense: точний збіг label, потім keyword
-      const byLabel = TX_CATEGORIES.expense.find(tc => tc.label.toLowerCase() === n);
-      if (byLabel) { catKeyMap[c.id] = byLabel.id; return; }
-      const byColor = TX_CATEGORIES.expense.find(tc => tc.id === c.color);
-      if (byColor) { catKeyMap[c.id] = byColor.id; return; }
-      if      (n.includes("продукт") || n.includes("їжа"))                             catKeyMap[c.id] = "food";
-      else if (n.includes("кафе") || n.includes("ресторан"))                           catKeyMap[c.id] = "cafe";
-      else if (n.includes("пальн") || n.includes("бензин") || n.includes("авто"))      catKeyMap[c.id] = "fuel";
-      else if (n.includes("транспорт") || n.includes("метро"))                         catKeyMap[c.id] = "transport";
-      else if (n.includes("здоров") || n.includes("медиц") || n.includes("аптек"))     catKeyMap[c.id] = "health";
-      else if (n.includes("комунальн") || n.includes("оренд"))                         catKeyMap[c.id] = "housing";
-      else if (n.includes("одяг") || n.includes("взутт"))                              catKeyMap[c.id] = "clothes";
-      else if (n.includes("розваг") || n.includes("кіно"))                             catKeyMap[c.id] = "entertainment";
-      else if (n.includes("освіт") || n.includes("навчан"))                            catKeyMap[c.id] = "education";
-      else if (n.includes("спорт"))                                                     catKeyMap[c.id] = "sport";
-      else if (n.includes("краса"))                                                     catKeyMap[c.id] = "beauty";
-      else if (n.includes("тварин"))                                                    catKeyMap[c.id] = "pets";
-      else if (n.includes("подарун"))                                                   catKeyMap[c.id] = "gifts";
+      if      (n.includes("продукт") || n.includes("їжа"))  catKeyMap[c.id] = "food";
+      else if (n.includes("кафе") || n.includes("ресторан")) catKeyMap[c.id] = "cafe";
+      else if (n.includes("пальн") || n.includes("бензин") || n.includes("авто")) catKeyMap[c.id] = "fuel";
+      else if (n.includes("транспорт") || n.includes("метро")) catKeyMap[c.id] = "transport";
+      else if (n.includes("здоров") || n.includes("медиц")) catKeyMap[c.id] = "health";
+      else if (n.includes("комунальн") || n.includes("оренд")) catKeyMap[c.id] = "housing";
+      else if (n.includes("одяг") || n.includes("взутт")) catKeyMap[c.id] = "clothes";
+      else if (n.includes("розваг") || n.includes("кіно")) catKeyMap[c.id] = "entertainment";
+      else if (n.includes("освіт") || n.includes("навчан")) catKeyMap[c.id] = "education";
+      else if (n.includes("спорт")) catKeyMap[c.id] = "sport";
+      else if (n.includes("краса")) catKeyMap[c.id] = "beauty";
+      else if (n.includes("тварин")) catKeyMap[c.id] = "pets";
+      else if (n.includes("подарун")) catKeyMap[c.id] = "gifts";
       else catKeyMap[c.id] = n.replace(/\s+/g, "_");
     });
 
@@ -875,6 +946,52 @@ export default function BudgetPage() {
         );
       }
     }
+    setSeeding(false);
+    load();
+  }
+
+  // Скидає всі категорії і перестворює з TX_CATEGORIES
+  async function resetAndSeed() {
+    if (!confirm("Видалити всі поточні категорії бюджету і створити нові з категорій транзакцій?")) return;
+    setSeeding(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSeeding(false); return; }
+
+    // Видалити всі категорії користувача (subcategories/merchants каскадно або вручну)
+    const { data: existingCats } = await supabase.from("categories").select("id").eq("user_id", user.id);
+    if (existingCats?.length) {
+      const ids = existingCats.map(c => c.id);
+      await supabase.from("subcategories").delete().in("category_id", ids);
+      await supabase.from("merchants").delete().in("category_id", ids);
+      await supabase.from("budgets").delete().in("category_id", ids);
+      await supabase.from("categories").delete().eq("user_id", user.id);
+    }
+
+    // Витрати з TX_CATEGORIES
+    let order = 0;
+    for (const tc of TX_CATEGORIES.expense) {
+      const { data: cat } = await supabase.from("categories").insert({
+        user_id: user.id, name: tc.label, icon: tc.emoji,
+        type: "variable", color: tc.id, sort_order: order++,
+      }).select("id").single();
+      if (cat && MERCHANT_PRESETS[tc.id]) {
+        await supabase.from("merchants").insert(
+          MERCHANT_PRESETS[tc.id].map(m => ({
+            category_id: cat.id, name: m.name,
+            has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
+            bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
+          }))
+        );
+      }
+    }
+    // Доходи з TX_CATEGORIES
+    for (const tc of TX_CATEGORIES.income) {
+      await supabase.from("categories").insert({
+        user_id: user.id, name: tc.label, icon: tc.emoji,
+        type: "income", color: tc.id, sort_order: order++,
+      });
+    }
+
     setSeeding(false);
     load();
   }
@@ -953,6 +1070,12 @@ export default function BudgetPage() {
           <button onClick={copyPlan}
             className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-orange-400 transition-colors">
             <Icon d={extraIcons.copy} className="w-3.5 h-3.5" />Копіювати план
+          </button>
+          <div className="w-px h-5 bg-neutral-100 dark:bg-neutral-800 mx-1" />
+          <button onClick={resetAndSeed} disabled={seeding}
+            className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-red-400 transition-colors disabled:opacity-50">
+            {seeding ? <Icon d={icons.loader} className="w-3.5 h-3.5 animate-spin" /> : "↺"}
+            Скинути категорії
           </button>
         </Card>
       </div>
