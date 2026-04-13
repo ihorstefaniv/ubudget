@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Card } from "@/components/ui";
 
 type Tab = "budget" | "categories";
-type CategoryType = "fixed" | "variable" | "bonus";
+type CategoryType = "fixed" | "variable" | "bonus" | "income";
 
 interface DBCategory {
   id: string; user_id: string; name: string; icon: string;
@@ -159,137 +159,192 @@ function BudgetTab({ categories, onPlanChange, monthIdx, year, totalIncome, prev
       </div>
 
       {/* Table */}
-      <Card>
-        <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_0.8fr_0.8fr] px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-800/40">
-          {["Категорія","Топ заклад","План","Факт","Попер. міс.","%","Залишок"].map(h => (
-            <div key={h} className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">{h}</div>
-          ))}
-        </div>
+      {(() => {
+        const incomeCats  = categories.filter(c => c.type === "income");
+        const expenseCats = categories.filter(c => c.type !== "income");
+        const cols = "grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_0.8fr_0.8fr]";
+        const headers = ["Категорія","Топ заклад","План","Факт","Попер. міс.","%","Залишок"];
 
-        <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
-          {categories.map(cat => {
-            const pct       = cat.plan > 0 ? Math.round(cat.fact / cat.plan * 100) : 0;
-            const remaining = cat.plan - cat.fact;
-            const d         = delta(cat.fact, cat.prevFact);
-            const topM      = cat.merchants.filter(m => m.is_selected).find(m => m.has_bonus) || cat.merchants.find(m => m.is_selected);
-            const isExpanded = expanded.has(cat.id);
+        const renderCatRow = (cat: Category) => {
+          const pct       = cat.plan > 0 ? Math.round(cat.fact / cat.plan * 100) : 0;
+          const remaining = cat.plan - cat.fact;
+          const d         = delta(cat.fact, cat.prevFact);
+          const topM      = cat.merchants.filter(m => m.is_selected).find(m => m.has_bonus) || cat.merchants.find(m => m.is_selected);
+          const isExpanded = expanded.has(cat.id);
+          const isIncome   = cat.type === "income";
+          const sign       = isIncome ? "+" : (remaining < 0 ? "−" : "+");
+          const remColor   = isIncome
+            ? (cat.fact >= cat.plan ? "text-green-500" : "text-amber-500")
+            : (remaining < 0 ? "text-red-500" : "text-green-500");
 
-            return (
-              <div key={cat.id}>
-                <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_0.8fr_0.8fr] px-4 py-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors cursor-pointer group"
-                  onClick={() => cat.subcategories.length > 0 && toggle(cat.id)}>
+          return (
+            <div key={cat.id}>
+              <div className={`${cols} px-4 py-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors cursor-pointer group`}
+                onClick={() => cat.subcategories.length > 0 && toggle(cat.id)}>
 
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {cat.subcategories.length > 0
-                      ? <Icon d={isExpanded ? extraIcons.chevDown : extraIcons.chevRight} className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
-                      : <div className="w-3.5" />}
-                    <span className="text-base shrink-0">{cat.icon}</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">{cat.name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className="h-1.5 w-16 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-                          <div className={`h-full rounded-full ${pctBg(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                        </div>
-                        <span className={`text-xs font-medium ${cat.type === "fixed" ? "text-blue-400" : cat.type === "bonus" ? "text-pink-400" : "text-neutral-400"}`}>
-                          {cat.type === "fixed" ? "🔒 фікс." : cat.type === "bonus" ? "🎁 бонус" : "📅 змінна"}
-                        </span>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {cat.subcategories.length > 0
+                    ? <Icon d={isExpanded ? extraIcons.chevDown : extraIcons.chevRight} className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
+                    : <div className="w-3.5" />}
+                  <span className="text-base shrink-0">{cat.icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">{cat.name}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="h-1.5 w-16 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                        <div className={`h-full rounded-full ${isIncome ? "bg-green-400" : pctBg(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center" onClick={e => e.stopPropagation()}>
-                    {topM ? (
-                      <span className={`text-xs px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${topM.has_bonus ? "bg-green-50 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
-                        {topM.has_bonus && "🎁"} {topM.name}
+                      <span className={`text-xs font-medium ${cat.type === "fixed" ? "text-blue-400" : cat.type === "bonus" ? "text-pink-400" : cat.type === "income" ? "text-green-500" : "text-neutral-400"}`}>
+                        {cat.type === "fixed" ? "🔒 фікс." : cat.type === "bonus" ? "🎁 бонус" : cat.type === "income" ? "💰 дохід" : "📅 змінна"}
                       </span>
-                    ) : <span className="text-xs text-neutral-300">—</span>}
-                  </div>
-
-                  <div onClick={e => e.stopPropagation()}>
-                    <PlanCell value={cat.plan} onChange={v => onPlanChange(cat.id, v, monthIdx + 1, year)} />
-                  </div>
-
-                  <div className="flex items-center">
-                    <span className={`text-sm font-semibold tabular-nums ${cat.fact > cat.plan ? "text-red-500" : "text-neutral-900 dark:text-neutral-100"}`}>
-                      {fmt(cat.fact)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm text-neutral-500 tabular-nums">{fmt(cat.prevFact)}</span>
-                    {d && <span className={`text-xs font-medium ${d.val > 0 ? "text-red-400" : "text-green-500"}`}>{d.label}</span>}
-                  </div>
-
-                  <div className="flex items-center">
-                    <span className={`text-sm font-bold tabular-nums ${pctColor(pct)}`}>{pct}%</span>
-                  </div>
-
-                  <div className="flex items-center">
-                    <span className={`text-sm font-medium tabular-nums ${remaining < 0 ? "text-red-500" : "text-green-500"}`}>
-                      {remaining < 0 ? "−" : "+"}{fmt(remaining)}
-                    </span>
+                    </div>
                   </div>
                 </div>
 
-                {isExpanded && cat.subcategories.map(sub => {
-                  const sPct = sub.plan > 0 ? Math.round(sub.fact / sub.plan * 100) : 0;
-                  const sRem = sub.plan - sub.fact;
-                  const sd   = delta(sub.fact, sub.prevFact);
-                  return (
-                    <div key={sub.id} className="grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_0.8fr_0.8fr] px-4 py-2.5 bg-neutral-50/50 dark:bg-neutral-800/20 border-t border-neutral-100/50 dark:border-neutral-800/30">
-                      <div className="flex items-center gap-2.5 pl-6">
-                        <span className="text-sm shrink-0">{sub.icon}</span>
-                        <p className="text-xs text-neutral-600 dark:text-neutral-400">{sub.name}</p>
+                <div className="flex items-center" onClick={e => e.stopPropagation()}>
+                  {topM ? (
+                    <span className={`text-xs px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${topM.has_bonus ? "bg-green-50 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
+                      {topM.has_bonus && "🎁"} {topM.name}
+                    </span>
+                  ) : <span className="text-xs text-neutral-300">—</span>}
+                </div>
+
+                <div onClick={e => e.stopPropagation()}>
+                  <PlanCell value={cat.plan} onChange={v => onPlanChange(cat.id, v, monthIdx + 1, year)} />
+                </div>
+
+                <div className="flex items-center">
+                  <span className={`text-sm font-semibold tabular-nums ${isIncome ? "text-green-500" : cat.fact > cat.plan ? "text-red-500" : "text-neutral-900 dark:text-neutral-100"}`}>
+                    {isIncome && cat.fact > 0 ? "+" : ""}{fmt(cat.fact)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-sm text-neutral-500 tabular-nums">{fmt(cat.prevFact)}</span>
+                  {d && <span className={`text-xs font-medium ${isIncome ? (d.val >= 0 ? "text-green-500" : "text-red-400") : (d.val > 0 ? "text-red-400" : "text-green-500")}`}>{d.label}</span>}
+                </div>
+
+                <div className="flex items-center">
+                  <span className={`text-sm font-bold tabular-nums ${pctColor(pct)}`}>{pct}%</span>
+                </div>
+
+                <div className="flex items-center">
+                  <span className={`text-sm font-medium tabular-nums ${remColor}`}>
+                    {sign}{fmt(Math.abs(isIncome ? cat.fact - cat.plan : remaining))}
+                  </span>
+                </div>
+              </div>
+
+              {isExpanded && cat.subcategories.map(sub => {
+                const sPct = sub.plan > 0 ? Math.round(sub.fact / sub.plan * 100) : 0;
+                const sRem = sub.plan - sub.fact;
+                const sd   = delta(sub.fact, sub.prevFact);
+                return (
+                  <div key={sub.id} className={`${cols} px-4 py-2.5 bg-neutral-50/50 dark:bg-neutral-800/20 border-t border-neutral-100/50 dark:border-neutral-800/30`}>
+                    <div className="flex items-center gap-2.5 pl-6">
+                      <span className="text-sm shrink-0">{sub.icon}</span>
+                      <p className="text-xs text-neutral-600 dark:text-neutral-400">{sub.name}</p>
+                    </div>
+                    <div />
+                    <div className="flex items-center"><span className="text-xs text-neutral-500 tabular-nums">{fmt(sub.plan)}</span></div>
+                    <div className="flex items-center"><span className={`text-xs font-medium tabular-nums ${sub.fact > sub.plan ? "text-red-400" : "text-neutral-700 dark:text-neutral-300"}`}>{fmt(sub.fact)}</span></div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-neutral-400 tabular-nums">{fmt(sub.prevFact)}</span>
+                      {sd && <span className={`text-xs ${sd.val > 0 ? "text-red-400" : "text-green-500"}`}>{sd.label}</span>}
+                    </div>
+                    <div className="flex items-center"><span className={`text-xs font-medium ${pctColor(sPct)}`}>{sPct}%</span></div>
+                    <div className="flex items-center"><span className={`text-xs tabular-nums ${sRem < 0 ? "text-red-400" : "text-green-500"}`}>{sRem < 0 ? "−" : "+"}{fmt(sRem)}</span></div>
+                  </div>
+                );
+              })}
+
+              {isExpanded && cat.merchants.filter(m => m.is_selected).length > 0 && (
+                <div className="px-14 py-2 bg-blue-50/30 dark:bg-blue-950/10 border-t border-blue-100/50 dark:border-blue-900/20">
+                  <p className="text-xs text-neutral-400 mb-1.5">Заклади:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {cat.merchants.filter(m => m.is_selected).map(m => (
+                      <span key={m.id} className={`text-xs px-2.5 py-1 rounded-lg font-medium ${m.has_bonus ? "bg-green-100 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
+                        {m.has_bonus && "🎁 "}{m.name}{m.has_bonus && m.bonus_percent ? ` ${m.bonus_percent}%` : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        return (
+          <>
+            {/* Income table */}
+            {incomeCats.length > 0 && (() => {
+              const totalIncPlan = incomeCats.reduce((s, c) => s + c.plan, 0);
+              const totalIncFact = incomeCats.reduce((s, c) => s + c.fact, 0);
+              const totalIncPrev = incomeCats.reduce((s, c) => s + c.prevFact, 0);
+              const incD = delta(totalIncFact, totalIncPrev);
+              return (
+                <Card>
+                  <div className={`${cols} px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-green-50/60 dark:bg-green-950/10`}>
+                    <div className="col-span-2 text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">💰 Доходи</div>
+                    {["План","Факт","Попер. міс.","%","Залишок"].map(h => (
+                      <div key={h} className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">{h}</div>
+                    ))}
+                  </div>
+                  <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
+                    {incomeCats.map(renderCatRow)}
+                    <div className={`${cols} px-4 py-3.5 bg-green-50/40 dark:bg-green-950/10 border-t-2 border-green-100 dark:border-green-900/30`}>
+                      <div className="flex items-center gap-2 col-span-2">
+                        <div className="w-3.5" />
+                        <p className="text-sm font-bold text-green-600 dark:text-green-400">Всього доходів</p>
+                      </div>
+                      <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100 tabular-nums">{fmt(totalIncPlan)}</p>
+                      <p className="text-sm font-bold text-green-500 tabular-nums">+{fmt(totalIncFact)}</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm font-medium text-neutral-500 tabular-nums">{fmt(totalIncPrev)}</p>
+                        {incD && <span className={`text-xs font-medium ${incD.val >= 0 ? "text-green-500" : "text-red-400"}`}>{incD.label}</span>}
                       </div>
                       <div />
-                      <div className="flex items-center"><span className="text-xs text-neutral-500 tabular-nums">{fmt(sub.plan)}</span></div>
-                      <div className="flex items-center"><span className={`text-xs font-medium tabular-nums ${sub.fact > sub.plan ? "text-red-400" : "text-neutral-700 dark:text-neutral-300"}`}>{fmt(sub.fact)}</span></div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-neutral-400 tabular-nums">{fmt(sub.prevFact)}</span>
-                        {sd && <span className={`text-xs ${sd.val > 0 ? "text-red-400" : "text-green-500"}`}>{sd.label}</span>}
-                      </div>
-                      <div className="flex items-center"><span className={`text-xs font-medium ${pctColor(sPct)}`}>{sPct}%</span></div>
-                      <div className="flex items-center"><span className={`text-xs tabular-nums ${sRem < 0 ? "text-red-400" : "text-green-500"}`}>{sRem < 0 ? "−" : "+"}{fmt(sRem)}</span></div>
-                    </div>
-                  );
-                })}
-
-                {isExpanded && cat.merchants.filter(m => m.is_selected).length > 0 && (
-                  <div className="px-14 py-2 bg-blue-50/30 dark:bg-blue-950/10 border-t border-blue-100/50 dark:border-blue-900/20">
-                    <p className="text-xs text-neutral-400 mb-1.5">Заклади:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {cat.merchants.filter(m => m.is_selected).map(m => (
-                        <span key={m.id} className={`text-xs px-2.5 py-1 rounded-lg font-medium ${m.has_bonus ? "bg-green-100 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
-                          {m.has_bonus && "🎁 "}{m.name}{m.has_bonus && m.bonus_percent ? ` ${m.bonus_percent}%` : ""}
-                        </span>
-                      ))}
+                      <p className={`text-sm font-bold tabular-nums ${totalIncFact >= totalIncPlan ? "text-green-500" : "text-amber-500"}`}>
+                        {totalIncFact >= totalIncPlan ? "+" : "−"}{fmt(Math.abs(totalIncFact - totalIncPlan))}
+                      </p>
                     </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                </Card>
+              );
+            })()}
 
-          {/* Total row */}
-          <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_0.8fr_0.8fr] px-4 py-3.5 bg-neutral-50 dark:bg-neutral-800/40 border-t-2 border-neutral-200 dark:border-neutral-700">
-            <div className="flex items-center gap-2">
-              <div className="w-3.5" />
-              <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100">Всього</p>
-            </div>
-            <div />
-            <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100 tabular-nums">{fmt(totalPlan)}</p>
-            <p className={`text-sm font-bold tabular-nums ${totalFact > totalPlan ? "text-red-500" : "text-orange-500"}`}>{fmt(totalFact)}</p>
-            <div className="flex items-center gap-1">
-              <p className="text-sm font-medium text-neutral-500 tabular-nums">{fmt(totalPrev)}</p>
-              {totalDelta && <span className={`text-xs font-medium ${totalDelta.val > 0 ? "text-red-400" : "text-green-500"}`}>{totalDelta.label}</span>}
-            </div>
-            <p className={`text-sm font-bold tabular-nums ${pctColor(totalPct)}`}>{totalPct}%</p>
-            <p className={`text-sm font-bold tabular-nums ${totalFact > totalPlan ? "text-red-500" : "text-green-500"}`}>
-              {totalFact > totalPlan ? "−" : "+"}{fmt(Math.abs(totalPlan - totalFact))}
-            </p>
-          </div>
-        </div>
-      </Card>
+            {/* Expense table */}
+            <Card>
+              <div className={`${cols} px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-800/40`}>
+                {headers.map(h => (
+                  <div key={h} className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">{h}</div>
+                ))}
+              </div>
+
+              <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
+                {expenseCats.map(renderCatRow)}
+                {/* Total row */}
+                <div className={`${cols} px-4 py-3.5 bg-neutral-50 dark:bg-neutral-800/40 border-t-2 border-neutral-200 dark:border-neutral-700`}>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3.5" />
+                    <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100">Всього витрат</p>
+                  </div>
+                  <div />
+                  <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100 tabular-nums">{fmt(totalPlan)}</p>
+                  <p className={`text-sm font-bold tabular-nums ${totalFact > totalPlan ? "text-red-500" : "text-orange-500"}`}>{fmt(totalFact)}</p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm font-medium text-neutral-500 tabular-nums">{fmt(totalPrev)}</p>
+                    {totalDelta && <span className={`text-xs font-medium ${totalDelta.val > 0 ? "text-red-400" : "text-green-500"}`}>{totalDelta.label}</span>}
+                  </div>
+                  <p className={`text-sm font-bold tabular-nums ${pctColor(totalPct)}`}>{totalPct}%</p>
+                  <p className={`text-sm font-bold tabular-nums ${totalFact > totalPlan ? "text-red-500" : "text-green-500"}`}>
+                    {totalFact > totalPlan ? "−" : "+"}{fmt(Math.abs(totalPlan - totalFact))}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </>
+        );
+      })()}
 
       {/* Obligations from credits */}
       {obligations.length > 0 && (
@@ -365,7 +420,7 @@ const MERCHANT_PRESETS: Record<string, { name: string; has_bonus: boolean; bonus
   clothing:  [{ name: "Zara", has_bonus: false }, { name: "H&M", has_bonus: false }, { name: "Rozetka", has_bonus: true, bonus_percent: 1, bonus_label: "Rozetka бали" }],
 };
 
-const TYPE_LABELS: Record<CategoryType, string> = { fixed: "🔒 Фіксована", variable: "📅 Змінна", bonus: "🎁 Бонусна" };
+const TYPE_LABELS: Record<CategoryType, string> = { fixed: "🔒 Фіксована", variable: "📅 Змінна", bonus: "🎁 Бонусна", income: "💰 Дохід" };
 
 const DEFAULT_CATEGORIES: {
   name: string; icon: string; type: CategoryType; key: string; merchantKey: string | null;
@@ -390,6 +445,13 @@ const DEFAULT_CATEGORIES: {
   { name: "Зв'язок",            icon: "📱", type: "fixed",    key: "telecom",       merchantKey: null,
     subs: [] },
   { name: "Освіта",             icon: "📚", type: "variable", key: "education",     merchantKey: null,
+    subs: [] },
+  // Income categories
+  { name: "Зарплата",           icon: "💼", type: "income",   key: "salary",        merchantKey: null,
+    subs: [] },
+  { name: "Фріланс",            icon: "💻", type: "income",   key: "freelance",     merchantKey: null,
+    subs: [] },
+  { name: "Інші доходи",        icon: "💰", type: "income",   key: "other_income",  merchantKey: null,
     subs: [] },
 ];
 
@@ -488,8 +550,8 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
               placeholder="Назва категорії"
               className={`flex-1 ${inp} bg-white dark:bg-neutral-800`} />
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {(["fixed", "variable", "bonus"] as CategoryType[]).map(t => (
+          <div className="grid grid-cols-2 gap-2">
+            {(["fixed", "variable", "bonus", "income"] as CategoryType[]).map(t => (
               <button key={t} onClick={() => setNewCat(p => ({ ...p, type: t }))}
                 className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all text-left ${newCat.type === t ? "border-orange-300 bg-orange-100 dark:bg-orange-950/30 text-orange-600" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
                 {TYPE_LABELS[t]}
@@ -529,7 +591,7 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
               </div>
               <select value={cat.type} onChange={e => updateCat(cat.id, { type: e.target.value })}
                 className="px-2 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-600 dark:text-neutral-400 focus:outline-none">
-                {(["fixed", "variable", "bonus"] as CategoryType[]).map(t => (
+                {(["fixed", "variable", "bonus", "income"] as CategoryType[]).map(t => (
                   <option key={t} value={t}>{TYPE_LABELS[t]}</option>
                 ))}
               </select>
@@ -667,10 +729,10 @@ export default function BudgetPage() {
       supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
         .gte("transaction_date", prevDateStart).lt("transaction_date", prevDateEnd)
         .eq("type", "expense").is("deleted_at", null),
-      supabase.from("transactions").select("amount").eq("user_id", user.id)
+      supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
         .gte("transaction_date", dateStart).lt("transaction_date", dateEnd)
         .eq("type", "income").is("deleted_at", null),
-      supabase.from("transactions").select("amount").eq("user_id", user.id)
+      supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
         .gte("transaction_date", prevDateStart).lt("transaction_date", prevDateEnd)
         .eq("type", "income").is("deleted_at", null),
       supabase.from("credits").select("name,monthly_payment,type").eq("user_id", user.id)
@@ -687,9 +749,14 @@ export default function BudgetPage() {
     budgets?.forEach(b => { budgetMap[b.category_id] = Number(b.plan_amount); });
     budgetsPrev?.forEach(b => { budgetPrevMap[b.category_id] = Number(b.plan_amount); });
 
-    // Compute income
-    const inc     = (incTxs     ?? []).reduce((s, t) => s + Number(t.amount), 0);
-    const incPrev = (incTxsPrev ?? []).reduce((s, t) => s + Number(t.amount), 0);
+    // Income fact maps (for income categories)
+    const incomeFactMap: Record<string, number>     = {};
+    const incomePrevFactMap: Record<string, number> = {};
+    (incTxs     ?? []).forEach(t => { const k = t.category_key ?? "other_income"; incomeFactMap[k]     = (incomeFactMap[k]     ?? 0) + Number(t.amount); });
+    (incTxsPrev ?? []).forEach(t => { const k = t.category_key ?? "other_income"; incomePrevFactMap[k] = (incomePrevFactMap[k] ?? 0) + Number(t.amount); });
+
+    const inc     = Object.values(incomeFactMap).reduce((s, v) => s + v, 0);
+    const incPrev = Object.values(incomePrevFactMap).reduce((s, v) => s + v, 0);
     setTotalIncome(inc);
     setPrevIncome(incPrev);
 
@@ -702,6 +769,7 @@ export default function BudgetPage() {
     const catKeyMap: Record<string, string> = {};
     cats?.forEach(c => {
       const n = c.name.toLowerCase();
+      // Expense keys
       if      (n.includes("продукт") || n.includes("їжа") || n.includes("харч"))             catKeyMap[c.id] = "food";
       else if (n.includes("кафе") || n.includes("ресторан") || n.includes("кав"))            catKeyMap[c.id] = "cafe";
       else if (n.includes("авто") || n.includes("пальн") || n.includes("бензин"))            catKeyMap[c.id] = "fuel";
@@ -712,16 +780,22 @@ export default function BudgetPage() {
       else if (n.includes("розваг") || n.includes("дозвілл") || n.includes("кіно"))          catKeyMap[c.id] = "entertainment";
       else if (n.includes("зв'яз") || n.includes("телефон") || n.includes("мобільн"))        catKeyMap[c.id] = "telecom";
       else if (n.includes("освіт") || n.includes("навчан") || n.includes("курс"))            catKeyMap[c.id] = "education";
+      // Income keys
+      else if (n.includes("зарплат") || n.includes("оклад") || n.includes("salary"))        catKeyMap[c.id] = "salary";
+      else if (n.includes("фріланс") || n.includes("freelance") || n.includes("підробіт"))  catKeyMap[c.id] = "freelance";
+      else if (n.includes("пасивн") || n.includes("дивіденд") || n.includes("відсотк"))     catKeyMap[c.id] = "passive";
+      else if (n.includes("інш") && c.type === "income")                                     catKeyMap[c.id] = "other_income";
       else catKeyMap[c.id] = n.replace(/\s+/g, "_");
     });
 
     setCategories((cats ?? []).map(cat => {
       const ck = catKeyMap[cat.id] ?? cat.id;
+      const isIncome = cat.type === "income";
       return {
         ...cat,
         plan: budgetMap[cat.id] ?? 0,
-        fact: factMap[ck] ?? 0,
-        prevFact: prevFactMap[ck] ?? 0,
+        fact:     isIncome ? (incomeFactMap[ck]     ?? 0) : (factMap[ck]     ?? 0),
+        prevFact: isIncome ? (incomePrevFactMap[ck] ?? 0) : (prevFactMap[ck] ?? 0),
         subcategories: (subs ?? []).filter(s => s.category_id === cat.id).map(s => ({
           ...s, sort_order: s.sort_order ?? 0, plan: 0, fact: 0, prevFact: 0,
         })),
