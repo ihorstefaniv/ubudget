@@ -736,7 +736,7 @@ export default function BudgetPage() {
     ] = await Promise.all([
       supabase.from("categories").select("*").eq("user_id", user.id).order("sort_order"),
       supabase.from("subcategories").select("*").eq("user_id", user.id),
-      supabase.from("merchants").select("*").eq("user_id", user.id),
+      supabase.from("merchants").select("*"), // filtered after by category_id
       supabase.from("budgets").select("*").eq("user_id", user.id).eq("month", month).eq("year", year),
       supabase.from("budgets").select("*").eq("user_id", user.id).eq("month", prevMonth).eq("year", prevYear),
       supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
@@ -755,6 +755,10 @@ export default function BudgetPage() {
         .neq("is_archived", true).gt("monthly_payment", 0),
     ]);
 
+    // Filter merchants to only those whose category belongs to this user
+    const userCatIds = new Set((cats ?? []).map(c => c.id));
+    const userMerch  = (merch ?? []).filter(m => userCatIds.has(m.category_id));
+
     const factMap: Record<string, number>     = {};
     const prevFactMap: Record<string, number> = {};
     txs?.forEach(t => { const k = t.category_key ?? "other"; factMap[k] = (factMap[k] ?? 0) + Number(t.amount); });
@@ -766,10 +770,11 @@ export default function BudgetPage() {
     budgetsPrev?.forEach(b => { budgetPrevMap[b.category_id] = Number(b.plan_amount); });
 
     // Income fact maps (for income categories)
+    // Fallback → "other_in" (відповідає TX_CATEGORIES.income id для "Інший дохід")
     const incomeFactMap: Record<string, number>     = {};
     const incomePrevFactMap: Record<string, number> = {};
-    (incTxs     ?? []).forEach(t => { const k = t.category_key ?? "other_income"; incomeFactMap[k]     = (incomeFactMap[k]     ?? 0) + Number(t.amount); });
-    (incTxsPrev ?? []).forEach(t => { const k = t.category_key ?? "other_income"; incomePrevFactMap[k] = (incomePrevFactMap[k] ?? 0) + Number(t.amount); });
+    (incTxs     ?? []).forEach(t => { const k = (t.category_key && t.category_key !== "") ? t.category_key : "other_in"; incomeFactMap[k]     = (incomeFactMap[k]     ?? 0) + Number(t.amount); });
+    (incTxsPrev ?? []).forEach(t => { const k = (t.category_key && t.category_key !== "") ? t.category_key : "other_in"; incomePrevFactMap[k] = (incomePrevFactMap[k] ?? 0) + Number(t.amount); });
 
     const inc     = Object.values(incomeFactMap).reduce((s, v) => s + v, 0);
     const incPrev = Object.values(incomePrevFactMap).reduce((s, v) => s + v, 0);
@@ -782,44 +787,45 @@ export default function BudgetPage() {
     })));
 
     // catKeyMap: category id → transaction category_key
-    // Стратегія (3 рівні):
-    // 1. color field = txKey (якщо категорію створено через seed або вручну з явним ключем)
-    // 2. Точний збіг назви з TX_CATEGORIES label (case-insensitive)
-    // 3. Fallback: нормалізована назва
-    const allTxCats = [...TX_CATEGORIES.expense, ...TX_CATEGORIES.income];
+    // Стратегія (income: явний match по TX_CATEGORIES; expense: keyword fallback)
     const catKeyMap: Record<string, string> = {};
     cats?.forEach(c => {
-      // Рівень 1: color зберігає явний txKey
-      if (c.color && allTxCats.some(tc => tc.id === c.color)) {
-        catKeyMap[c.id] = c.color;
+      const n = c.name.toLowerCase().trim();
+
+      if (c.type === "income") {
+        // Income: шукаємо по точному збігу label або id в TX_CATEGORIES.income
+        const byLabel = TX_CATEGORIES.income.find(tc => tc.label.toLowerCase() === n);
+        if (byLabel) { catKeyMap[c.id] = byLabel.id; return; }
+        const byId    = TX_CATEGORIES.income.find(tc => tc.id === n || tc.id === c.color);
+        if (byId)    { catKeyMap[c.id] = byId.id; return; }
+        // Keyword fallback для income
+        if      (n.includes("зарплат") || n.includes("оклад") || n.includes("salary"))  catKeyMap[c.id] = "salary";
+        else if (n.includes("фріланс") || n.includes("підробіт"))                       catKeyMap[c.id] = "freelance";
+        else if (n.includes("бізнес") || n.includes("підприємс"))                       catKeyMap[c.id] = "business";
+        else if (n.includes("інвестиц") || n.includes("дивіденд"))                     catKeyMap[c.id] = "invest";
+        else if (n.includes("поверн"))                                                   catKeyMap[c.id] = "refund";
+        else catKeyMap[c.id] = "other_in";
         return;
       }
-      // Рівень 2: точний збіг назви з TX_LABEL_TO_KEY
-      const nameKey = TX_LABEL_TO_KEY[c.name.toLowerCase()];
-      if (nameKey) {
-        catKeyMap[c.id] = nameKey;
-        return;
-      }
-      // Рівень 3: keyword fallback
-      const n = c.name.toLowerCase();
-      if      (n.includes("продукт") || n.includes("їжа"))                               catKeyMap[c.id] = "food";
-      else if (n.includes("кафе") || n.includes("ресторан"))                             catKeyMap[c.id] = "cafe";
-      else if (n.includes("пальн") || n.includes("бензин") || n.includes("авто"))        catKeyMap[c.id] = "fuel";
-      else if (n.includes("транспорт") || n.includes("метро"))                           catKeyMap[c.id] = "transport";
-      else if (n.includes("здоров") || n.includes("медиц") || n.includes("аптек"))       catKeyMap[c.id] = "health";
-      else if (n.includes("комунальн") || n.includes("оренд"))                           catKeyMap[c.id] = "housing";
-      else if (n.includes("одяг") || n.includes("взутт"))                                catKeyMap[c.id] = "clothes";
-      else if (n.includes("розваг") || n.includes("кіно"))                               catKeyMap[c.id] = "entertainment";
-      else if (n.includes("освіт") || n.includes("навчан"))                              catKeyMap[c.id] = "education";
-      else if (n.includes("спорт"))                                                       catKeyMap[c.id] = "sport";
-      else if (n.includes("краса") || n.includes("beauty"))                              catKeyMap[c.id] = "beauty";
-      else if (n.includes("тварин") || n.includes("pets"))                               catKeyMap[c.id] = "pets";
-      else if (n.includes("зарплат") || n.includes("оклад"))                             catKeyMap[c.id] = "salary";
-      else if (n.includes("фріланс") || n.includes("підробіт"))                         catKeyMap[c.id] = "freelance";
-      else if (n.includes("бізнес") || n.includes("підприємс"))                         catKeyMap[c.id] = "business";
-      else if (n.includes("інвестиц"))                                                   catKeyMap[c.id] = "invest";
-      else if (n.includes("поверн"))                                                     catKeyMap[c.id] = "refund";
-      else if (n.includes("інш") && c.type === "income")                                catKeyMap[c.id] = "other_in";
+
+      // Expense: точний збіг label, потім keyword
+      const byLabel = TX_CATEGORIES.expense.find(tc => tc.label.toLowerCase() === n);
+      if (byLabel) { catKeyMap[c.id] = byLabel.id; return; }
+      const byColor = TX_CATEGORIES.expense.find(tc => tc.id === c.color);
+      if (byColor) { catKeyMap[c.id] = byColor.id; return; }
+      if      (n.includes("продукт") || n.includes("їжа"))                             catKeyMap[c.id] = "food";
+      else if (n.includes("кафе") || n.includes("ресторан"))                           catKeyMap[c.id] = "cafe";
+      else if (n.includes("пальн") || n.includes("бензин") || n.includes("авто"))      catKeyMap[c.id] = "fuel";
+      else if (n.includes("транспорт") || n.includes("метро"))                         catKeyMap[c.id] = "transport";
+      else if (n.includes("здоров") || n.includes("медиц") || n.includes("аптек"))     catKeyMap[c.id] = "health";
+      else if (n.includes("комунальн") || n.includes("оренд"))                         catKeyMap[c.id] = "housing";
+      else if (n.includes("одяг") || n.includes("взутт"))                              catKeyMap[c.id] = "clothes";
+      else if (n.includes("розваг") || n.includes("кіно"))                             catKeyMap[c.id] = "entertainment";
+      else if (n.includes("освіт") || n.includes("навчан"))                            catKeyMap[c.id] = "education";
+      else if (n.includes("спорт"))                                                     catKeyMap[c.id] = "sport";
+      else if (n.includes("краса"))                                                     catKeyMap[c.id] = "beauty";
+      else if (n.includes("тварин"))                                                    catKeyMap[c.id] = "pets";
+      else if (n.includes("подарун"))                                                   catKeyMap[c.id] = "gifts";
       else catKeyMap[c.id] = n.replace(/\s+/g, "_");
     });
 
@@ -834,7 +840,7 @@ export default function BudgetPage() {
         subcategories: (subs ?? []).filter(s => s.category_id === cat.id).map(s => ({
           ...s, sort_order: s.sort_order ?? 0, plan: 0, fact: 0, prevFact: 0,
         })),
-        merchants: (merch ?? []).filter(m => m.category_id === cat.id),
+        merchants: userMerch.filter(m => m.category_id === cat.id),
       };
     }));
     setLoading(false);
