@@ -102,11 +102,15 @@ function PlanCell({ value, onChange }: { value: number; onChange: (v: number) =>
   );
 }
 
+interface Obligation { name: string; monthly_payment: number; type: string; }
+
 // ─── BUDGET TAB ───────────────────────────────────────────────
-function BudgetTab({ categories, onPlanChange, monthIdx, year }: {
+function BudgetTab({ categories, onPlanChange, monthIdx, year, totalIncome, prevIncome, obligations }: {
   categories: Category[];
   onPlanChange: (catId: string, val: number, month: number, year: number) => void;
   monthIdx: number; year: number;
+  totalIncome: number; prevIncome: number;
+  obligations: Obligation[];
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (id: string) => setExpanded(prev => {
@@ -119,22 +123,39 @@ function BudgetTab({ categories, onPlanChange, monthIdx, year }: {
   const totalPct   = totalPlan > 0 ? Math.round(totalFact / totalPlan * 100) : 0;
   const totalDelta = delta(totalFact, totalPrev);
 
+  const obligationsTotal = obligations.reduce((s, o) => s + Number(o.monthly_payment), 0);
+  const balance = totalIncome - totalFact - obligationsTotal;
+  const incDelta = delta(totalIncome, prevIncome);
+
   return (
     <div className="space-y-4">
-      {/* Summary */}
+      {/* Income + Expenses summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "Загальний план",    value: fmt(totalPlan), color: "text-neutral-900 dark:text-neutral-100" },
-          { label: "Витрачено факт",    value: fmt(totalFact), color: totalFact > totalPlan ? "text-red-500" : "text-orange-500" },
-          { label: "Попередній місяць", value: fmt(totalPrev), sub: totalDelta?.label, color: "text-neutral-600 dark:text-neutral-400" },
-          { label: "Залишок",           value: fmt(Math.abs(totalPlan - totalFact)), color: totalFact > totalPlan ? "text-red-500" : "text-green-500" },
-        ].map(({ label, value, color, sub }) => (
-          <Card key={label} className="p-4">
-            <p className={`text-lg font-bold ${color}`}>{value}</p>
-            {sub && <p className={`text-xs font-medium mt-0.5 ${sub.startsWith("+") ? "text-red-400" : "text-green-500"}`}>{sub} до пп</p>}
-            <p className="text-xs text-neutral-400 mt-1">{label}</p>
+        <Card className="p-4">
+          <p className="text-lg font-bold text-green-500">{fmt(totalIncome)}</p>
+          {incDelta && <p className={`text-xs font-medium mt-0.5 ${incDelta.val >= 0 ? "text-green-500" : "text-red-400"}`}>{incDelta.label} до пп</p>}
+          <p className="text-xs text-neutral-400 mt-1">Дохід за місяць</p>
+        </Card>
+        <Card className="p-4">
+          <p className={`text-lg font-bold ${totalFact > totalPlan ? "text-red-500" : "text-orange-500"}`}>{fmt(totalFact)}</p>
+          <p className="text-xs text-neutral-400 mt-1">Витрачено факт / план {fmt(totalPlan)}</p>
+        </Card>
+        {obligationsTotal > 0 ? (
+          <Card className="p-4">
+            <p className="text-lg font-bold text-blue-500">{fmt(obligationsTotal)}</p>
+            <p className="text-xs text-neutral-400 mt-1">Зобов'язання ({obligations.length} платежів)</p>
           </Card>
-        ))}
+        ) : (
+          <Card className="p-4">
+            <p className={`text-lg font-bold text-neutral-500`}>{fmt(totalPrev)}</p>
+            {totalDelta && <p className={`text-xs font-medium mt-0.5 ${totalDelta.val > 0 ? "text-red-400" : "text-green-500"}`}>{totalDelta.label} до пп</p>}
+            <p className="text-xs text-neutral-400 mt-1">Попередній місяць</p>
+          </Card>
+        )}
+        <Card className="p-4">
+          <p className={`text-lg font-bold ${balance < 0 ? "text-red-500" : "text-green-500"}`}>{balance < 0 ? "−" : "+"}{fmt(Math.abs(balance))}</p>
+          <p className="text-xs text-neutral-400 mt-1">{totalIncome > 0 ? "Баланс місяця" : "Залишок бюджету"}</p>
+        </Card>
       </div>
 
       {/* Table */}
@@ -270,6 +291,32 @@ function BudgetTab({ categories, onPlanChange, monthIdx, year }: {
         </div>
       </Card>
 
+      {/* Obligations from credits */}
+      {obligations.length > 0 && (
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xl">💳</span>
+            <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">Зобов'язання</h3>
+            <span className="text-xs text-neutral-400">щомісячні платежі з розділу Кредити</span>
+          </div>
+          <div className="space-y-2">
+            {obligations.map((o, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{o.name}</p>
+                  <p className="text-xs text-neutral-400">{o.type === "credit_card" ? "Кредитна карта" : o.type === "installment" ? "Розстрочка" : o.type === "mortgage" ? "Іпотека" : "Кредит"}</p>
+                </div>
+                <p className="text-sm font-bold text-blue-500">−{fmt(o.monthly_payment)}</p>
+              </div>
+            ))}
+            <div className="pt-2 mt-2 border-t border-neutral-100 dark:border-neutral-800 flex justify-between">
+              <span className="text-sm text-neutral-500">Всього зобов'язань</span>
+              <span className="text-sm font-bold text-blue-500">−{fmt(obligationsTotal)}</span>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Bonus summary */}
       {(() => {
         const bonuses = categories.flatMap(cat =>
@@ -319,6 +366,32 @@ const MERCHANT_PRESETS: Record<string, { name: string; has_bonus: boolean; bonus
 };
 
 const TYPE_LABELS: Record<CategoryType, string> = { fixed: "🔒 Фіксована", variable: "📅 Змінна", bonus: "🎁 Бонусна" };
+
+const DEFAULT_CATEGORIES: {
+  name: string; icon: string; type: CategoryType; key: string; merchantKey: string | null;
+  subs: { name: string; icon: string }[];
+}[] = [
+  { name: "Продукти",           icon: "🛒", type: "variable", key: "food",          merchantKey: "food",
+    subs: [{ name: "Супермаркет", icon: "🏪" }, { name: "Ринок / базар", icon: "🥦" }] },
+  { name: "Кафе та ресторани",  icon: "☕", type: "variable", key: "cafe",          merchantKey: "cafe",
+    subs: [{ name: "Кава", icon: "☕" }, { name: "Обід / Вечеря", icon: "🍽" }] },
+  { name: "Авто",               icon: "🚗", type: "variable", key: "fuel",          merchantKey: "fuel",
+    subs: [{ name: "Пальне", icon: "⛽" }, { name: "СТО / ремонт", icon: "🔧" }, { name: "Страхівка", icon: "📋" }, { name: "Паркінг", icon: "🅿️" }] },
+  { name: "Транспорт",          icon: "🚌", type: "variable", key: "transport",     merchantKey: "transport",
+    subs: [{ name: "Метро / Автобус", icon: "🚇" }, { name: "Таксі", icon: "🚕" }] },
+  { name: "Комунальні",         icon: "💡", type: "fixed",    key: "housing",       merchantKey: null,
+    subs: [{ name: "Електрика", icon: "⚡" }, { name: "Вода", icon: "💧" }, { name: "Газ", icon: "🔥" }, { name: "Інтернет", icon: "📡" }] },
+  { name: "Здоров'я",           icon: "💊", type: "variable", key: "health",        merchantKey: "health",
+    subs: [{ name: "Ліки", icon: "💊" }, { name: "Лікар", icon: "🩺" }] },
+  { name: "Одяг та взуття",     icon: "👔", type: "variable", key: "clothes",       merchantKey: "clothing",
+    subs: [] },
+  { name: "Розваги",            icon: "🎮", type: "variable", key: "entertainment", merchantKey: null,
+    subs: [{ name: "Кіно / театр", icon: "🎬" }, { name: "Підписки", icon: "📺" }, { name: "Ігри", icon: "🕹" }] },
+  { name: "Зв'язок",            icon: "📱", type: "fixed",    key: "telecom",       merchantKey: null,
+    subs: [] },
+  { name: "Освіта",             icon: "📚", type: "variable", key: "education",     merchantKey: null,
+    subs: [] },
+];
 
 function CategoriesTab({ categories, onReload }: { categories: Category[]; onReload: () => void }) {
   const supabase = createClient();
@@ -556,7 +629,11 @@ export default function BudgetPage() {
   const [monthIdx, setMonthIdx] = useState(now.getMonth());
   const [year, setYear]         = useState(now.getFullYear());
   const [loading, setLoading]   = useState(true);
+  const [seeding, setSeeding]   = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [totalIncome, setTotalIncome] = useState(0);
+  const [prevIncome, setPrevIncome]   = useState(0);
+  const [obligations, setObligations] = useState<Obligation[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -567,20 +644,37 @@ export default function BudgetPage() {
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevYear  = month === 1 ? year - 1 : year;
 
-    const [{ data: cats }, { data: subs }, { data: merch }, { data: budgets }, { data: budgetsPrev }, { data: txs }, { data: txsPrev }] = await Promise.all([
+    const dateStart     = `${year}-${String(month).padStart(2,"0")}-01`;
+    const dateEnd       = month === 12 ? `${year+1}-01-01` : `${year}-${String(month+1).padStart(2,"0")}-01`;
+    const prevDateStart = `${prevYear}-${String(prevMonth).padStart(2,"0")}-01`;
+    const prevDateEnd   = prevMonth === 12 ? `${prevYear+1}-01-01` : `${prevYear}-${String(prevMonth+1).padStart(2,"0")}-01`;
+
+    const [
+      { data: cats }, { data: subs }, { data: merch },
+      { data: budgets }, { data: budgetsPrev },
+      { data: txs }, { data: txsPrev },
+      { data: incTxs }, { data: incTxsPrev },
+      { data: creditRows },
+    ] = await Promise.all([
       supabase.from("categories").select("*").eq("user_id", user.id).order("sort_order"),
       supabase.from("subcategories").select("*").eq("user_id", user.id),
       supabase.from("merchants").select("*").eq("user_id", user.id),
       supabase.from("budgets").select("*").eq("user_id", user.id).eq("month", month).eq("year", year),
       supabase.from("budgets").select("*").eq("user_id", user.id).eq("month", prevMonth).eq("year", prevYear),
       supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
-        .gte("transaction_date", `${year}-${String(month).padStart(2,"0")}-01`)
-        .lt("transaction_date", month === 12 ? `${year+1}-01-01` : `${year}-${String(month+1).padStart(2,"0")}-01`)
+        .gte("transaction_date", dateStart).lt("transaction_date", dateEnd)
         .eq("type", "expense").is("deleted_at", null),
       supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
-        .gte("transaction_date", `${prevYear}-${String(prevMonth).padStart(2,"0")}-01`)
-        .lt("transaction_date", prevMonth === 12 ? `${prevYear+1}-01-01` : `${prevYear}-${String(prevMonth+1).padStart(2,"0")}-01`)
+        .gte("transaction_date", prevDateStart).lt("transaction_date", prevDateEnd)
         .eq("type", "expense").is("deleted_at", null),
+      supabase.from("transactions").select("amount").eq("user_id", user.id)
+        .gte("transaction_date", dateStart).lt("transaction_date", dateEnd)
+        .eq("type", "income").is("deleted_at", null),
+      supabase.from("transactions").select("amount").eq("user_id", user.id)
+        .gte("transaction_date", prevDateStart).lt("transaction_date", prevDateEnd)
+        .eq("type", "income").is("deleted_at", null),
+      supabase.from("credits").select("name,monthly_payment,type").eq("user_id", user.id)
+        .neq("is_archived", true).gt("monthly_payment", 0),
     ]);
 
     const factMap: Record<string, number>     = {};
@@ -593,16 +687,32 @@ export default function BudgetPage() {
     budgets?.forEach(b => { budgetMap[b.category_id] = Number(b.plan_amount); });
     budgetsPrev?.forEach(b => { budgetPrevMap[b.category_id] = Number(b.plan_amount); });
 
+    // Compute income
+    const inc     = (incTxs     ?? []).reduce((s, t) => s + Number(t.amount), 0);
+    const incPrev = (incTxsPrev ?? []).reduce((s, t) => s + Number(t.amount), 0);
+    setTotalIncome(inc);
+    setPrevIncome(incPrev);
+
+    // Credits obligations
+    setObligations((creditRows ?? []).map(r => ({
+      name: r.name, monthly_payment: Number(r.monthly_payment), type: r.type,
+    })));
+
+    // catKeyMap: category id → transaction category_key
     const catKeyMap: Record<string, string> = {};
     cats?.forEach(c => {
-      if (c.name.toLowerCase().includes("продукт"))       catKeyMap[c.id] = "food";
-      else if (c.name.toLowerCase().includes("кафе"))     catKeyMap[c.id] = "cafe";
-      else if (c.name.toLowerCase().includes("пальн"))    catKeyMap[c.id] = "fuel";
-      else if (c.name.toLowerCase().includes("транспорт")) catKeyMap[c.id] = "transport";
-      else if (c.name.toLowerCase().includes("здоров"))   catKeyMap[c.id] = "health";
-      else if (c.name.toLowerCase().includes("комунальн")) catKeyMap[c.id] = "housing";
-      else if (c.name.toLowerCase().includes("одяг"))     catKeyMap[c.id] = "clothes";
-      else catKeyMap[c.id] = c.name.toLowerCase().replace(/\s+/g, "_");
+      const n = c.name.toLowerCase();
+      if      (n.includes("продукт") || n.includes("їжа") || n.includes("харч"))             catKeyMap[c.id] = "food";
+      else if (n.includes("кафе") || n.includes("ресторан") || n.includes("кав"))            catKeyMap[c.id] = "cafe";
+      else if (n.includes("авто") || n.includes("пальн") || n.includes("бензин"))            catKeyMap[c.id] = "fuel";
+      else if (n.includes("транспорт") || n.includes("метро") || n.includes("автобус"))      catKeyMap[c.id] = "transport";
+      else if (n.includes("здоров") || n.includes("медиц") || n.includes("аптек") || n.includes("лікар")) catKeyMap[c.id] = "health";
+      else if (n.includes("комунальн") || n.includes("оренд") || n.includes("кварт"))        catKeyMap[c.id] = "housing";
+      else if (n.includes("одяг") || n.includes("взутт"))                                    catKeyMap[c.id] = "clothes";
+      else if (n.includes("розваг") || n.includes("дозвілл") || n.includes("кіно"))          catKeyMap[c.id] = "entertainment";
+      else if (n.includes("зв'яз") || n.includes("телефон") || n.includes("мобільн"))        catKeyMap[c.id] = "telecom";
+      else if (n.includes("освіт") || n.includes("навчан") || n.includes("курс"))            catKeyMap[c.id] = "education";
+      else catKeyMap[c.id] = n.replace(/\s+/g, "_");
     });
 
     setCategories((cats ?? []).map(cat => {
@@ -622,6 +732,36 @@ export default function BudgetPage() {
   }, [monthIdx, year]);
 
   useEffect(() => { load(); }, [load]);
+
+  async function seedDefaultCategories() {
+    setSeeding(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSeeding(false); return; }
+    for (let i = 0; i < DEFAULT_CATEGORIES.length; i++) {
+      const dc = DEFAULT_CATEGORIES[i];
+      const { data: cat } = await supabase.from("categories").insert({
+        user_id: user.id, name: dc.name, icon: dc.icon,
+        type: dc.type, color: "neutral", sort_order: i,
+      }).select().single();
+      if (!cat) continue;
+      if (dc.subs.length > 0) {
+        await supabase.from("subcategories").insert(
+          dc.subs.map((s, j) => ({ user_id: user.id, category_id: cat.id, name: s.name, icon: s.icon, sort_order: j }))
+        );
+      }
+      if (dc.merchantKey && MERCHANT_PRESETS[dc.merchantKey]) {
+        await supabase.from("merchants").insert(
+          MERCHANT_PRESETS[dc.merchantKey].map(m => ({
+            user_id: user.id, category_id: cat.id, name: m.name,
+            has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
+            bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
+          }))
+        );
+      }
+    }
+    setSeeding(false);
+    load();
+  }
 
   async function handlePlanChange(catId: string, val: number, month: number, yr: number) {
     const { data: { user } } = await supabase.auth.getUser();
@@ -696,9 +836,28 @@ export default function BudgetPage() {
         <div className="flex items-center justify-center py-16">
           <Icon d={icons.loader} className="w-8 h-8 text-orange-400 animate-spin" />
         </div>
+      ) : categories.length === 0 && tab === "budget" ? (
+        <Card className="p-10 text-center">
+          <p className="text-4xl mb-4">📊</p>
+          <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-2">Бюджет ще не налаштований</h2>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-6 max-w-sm mx-auto">
+            Додайте популярні категорії одним кліком або перейдіть в «Категорії» і створіть власні.
+          </p>
+          <div className="flex gap-3 justify-center flex-wrap">
+            <button onClick={seedDefaultCategories} disabled={seeding}
+              className="px-6 py-2.5 rounded-xl bg-orange-400 text-white font-semibold text-sm hover:bg-orange-500 disabled:opacity-60 transition-all flex items-center gap-2">
+              {seeding && <Icon d={icons.loader} className="w-4 h-4 animate-spin" />}
+              🚀 Ініціалізувати категорії
+            </button>
+            <button onClick={() => setTab("categories")}
+              className="px-6 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 font-medium text-sm hover:border-orange-300 transition-all">
+              Додати вручну
+            </button>
+          </div>
+        </Card>
       ) : (
         <>
-          {tab === "budget"     && <BudgetTab categories={categories} onPlanChange={handlePlanChange} monthIdx={monthIdx} year={year} />}
+          {tab === "budget"     && <BudgetTab categories={categories} onPlanChange={handlePlanChange} monthIdx={monthIdx} year={year} totalIncome={totalIncome} prevIncome={prevIncome} obligations={obligations} />}
           {tab === "categories" && <CategoriesTab categories={categories} onReload={load} />}
         </>
       )}
