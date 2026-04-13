@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Button, Toggle } from "@/components/ui";
 import { fmt, dateLabel } from "@/lib/format";
+import { TX_CATEGORIES, getTxCategory } from "@/lib/categories";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -32,33 +33,7 @@ interface Account {
 
 // ─── Constants ────────────────────────────────────────────────
 
-const CATEGORIES = {
-  expense: [
-    { id: "food",          label: "Продукти",  emoji: "🛒" },
-    { id: "cafe",          label: "Кафе",       emoji: "☕" },
-    { id: "transport",     label: "Транспорт",  emoji: "🚗" },
-    { id: "fuel",          label: "Пальне",     emoji: "⛽" },
-    { id: "health",        label: "Здоров'я",   emoji: "💊" },
-    { id: "housing",       label: "Комунальні", emoji: "🏠" },
-    { id: "clothes",       label: "Одяг",       emoji: "👗" },
-    { id: "entertainment", label: "Розваги",    emoji: "🎮" },
-    { id: "education",     label: "Освіта",     emoji: "📚" },
-    { id: "sport",         label: "Спорт",      emoji: "🏃" },
-    { id: "beauty",        label: "Краса",      emoji: "💄" },
-    { id: "pets",          label: "Тварини",    emoji: "🐾" },
-    { id: "gifts",         label: "Подарунки",  emoji: "🎁" },
-    { id: "other",         label: "Інше",       emoji: "📦" },
-  ],
-  income: [
-    { id: "salary",    label: "Зарплата",   emoji: "💼" },
-    { id: "freelance", label: "Фріланс",    emoji: "💻" },
-    { id: "business",  label: "Бізнес",     emoji: "🏪" },
-    { id: "invest",    label: "Інвестиції", emoji: "📈" },
-    { id: "gift",      label: "Подарунок",  emoji: "🎀" },
-    { id: "refund",    label: "Повернення", emoji: "↩️" },
-    { id: "other_in",  label: "Інше",       emoji: "💰" },
-  ],
-};
+const CATEGORIES = TX_CATEGORIES; // alias for local use
 
 const CURRENCIES = ["UAH", "USD", "EUR", "PLN"];
 
@@ -74,9 +49,7 @@ function groupByDate(txs: Transaction[]) {
 }
 
 function getCat(type: TxType, key: string) {
-  if (type === "transfer") return { emoji: "↔️", label: "Переказ" };
-  const list = type === "expense" ? CATEGORIES.expense : CATEGORIES.income;
-  return list.find(c => c.id === key) ?? { emoji: "📦", label: key };
+  return getTxCategory(type, key);
 }
 
 // ─── Add/Edit Modal ───────────────────────────────────────────

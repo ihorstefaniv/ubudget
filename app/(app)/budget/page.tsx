@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Card } from "@/components/ui";
+import { TX_CATEGORIES, TX_LABEL_TO_KEY } from "@/lib/categories";
 
 type Tab = "budget" | "categories";
 type CategoryType = "fixed" | "variable" | "bonus" | "income";
@@ -423,35 +424,50 @@ const MERCHANT_PRESETS: Record<string, { name: string; has_bonus: boolean; bonus
 const TYPE_LABELS: Record<CategoryType, string> = { fixed: "🔒 Фіксована", variable: "📅 Змінна", bonus: "🎁 Бонусна", income: "💰 Дохід" };
 
 const DEFAULT_CATEGORIES: {
-  name: string; icon: string; type: CategoryType; key: string; merchantKey: string | null;
+  name: string; icon: string; type: CategoryType; txKey: string; merchantKey: string | null;
   subs: { name: string; icon: string }[];
 }[] = [
-  { name: "Продукти",           icon: "🛒", type: "variable", key: "food",          merchantKey: "food",
+  // Витрати — txKey точно відповідає TX_CATEGORIES.expense[n].id
+  { name: "Продукти",          icon: "🛒", type: "variable", txKey: "food",          merchantKey: "food",
     subs: [{ name: "Супермаркет", icon: "🏪" }, { name: "Ринок / базар", icon: "🥦" }] },
-  { name: "Кафе та ресторани",  icon: "☕", type: "variable", key: "cafe",          merchantKey: "cafe",
+  { name: "Кафе та ресторани", icon: "☕", type: "variable", txKey: "cafe",          merchantKey: "cafe",
     subs: [{ name: "Кава", icon: "☕" }, { name: "Обід / Вечеря", icon: "🍽" }] },
-  { name: "Авто",               icon: "🚗", type: "variable", key: "fuel",          merchantKey: "fuel",
-    subs: [{ name: "Пальне", icon: "⛽" }, { name: "СТО / ремонт", icon: "🔧" }, { name: "Страхівка", icon: "📋" }, { name: "Паркінг", icon: "🅿️" }] },
-  { name: "Транспорт",          icon: "🚌", type: "variable", key: "transport",     merchantKey: "transport",
+  { name: "Пальне та авто",    icon: "⛽", type: "variable", txKey: "fuel",          merchantKey: "fuel",
+    subs: [{ name: "Пальне", icon: "⛽" }, { name: "СТО / ремонт", icon: "🔧" }, { name: "Страхівка", icon: "📋" }] },
+  { name: "Транспорт",         icon: "🚌", type: "variable", txKey: "transport",     merchantKey: "transport",
     subs: [{ name: "Метро / Автобус", icon: "🚇" }, { name: "Таксі", icon: "🚕" }] },
-  { name: "Комунальні",         icon: "💡", type: "fixed",    key: "housing",       merchantKey: null,
+  { name: "Комунальні",        icon: "💡", type: "fixed",    txKey: "housing",       merchantKey: null,
     subs: [{ name: "Електрика", icon: "⚡" }, { name: "Вода", icon: "💧" }, { name: "Газ", icon: "🔥" }, { name: "Інтернет", icon: "📡" }] },
-  { name: "Здоров'я",           icon: "💊", type: "variable", key: "health",        merchantKey: "health",
+  { name: "Здоров'я",          icon: "💊", type: "variable", txKey: "health",        merchantKey: "health",
     subs: [{ name: "Ліки", icon: "💊" }, { name: "Лікар", icon: "🩺" }] },
-  { name: "Одяг та взуття",     icon: "👔", type: "variable", key: "clothes",       merchantKey: "clothing",
+  { name: "Одяг",              icon: "👗", type: "variable", txKey: "clothes",       merchantKey: "clothing",
     subs: [] },
-  { name: "Розваги",            icon: "🎮", type: "variable", key: "entertainment", merchantKey: null,
-    subs: [{ name: "Кіно / театр", icon: "🎬" }, { name: "Підписки", icon: "📺" }, { name: "Ігри", icon: "🕹" }] },
-  { name: "Зв'язок",            icon: "📱", type: "fixed",    key: "telecom",       merchantKey: null,
+  { name: "Розваги",           icon: "🎮", type: "variable", txKey: "entertainment", merchantKey: null,
+    subs: [{ name: "Кіно / театр", icon: "🎬" }, { name: "Підписки", icon: "📺" }] },
+  { name: "Освіта",            icon: "📚", type: "variable", txKey: "education",     merchantKey: null,
     subs: [] },
-  { name: "Освіта",             icon: "📚", type: "variable", key: "education",     merchantKey: null,
+  { name: "Спорт",             icon: "🏃", type: "variable", txKey: "sport",         merchantKey: null,
     subs: [] },
-  // Income categories
-  { name: "Зарплата",           icon: "💼", type: "income",   key: "salary",        merchantKey: null,
+  { name: "Краса",             icon: "💄", type: "variable", txKey: "beauty",        merchantKey: null,
     subs: [] },
-  { name: "Фріланс",            icon: "💻", type: "income",   key: "freelance",     merchantKey: null,
+  { name: "Тварини",           icon: "🐾", type: "variable", txKey: "pets",          merchantKey: null,
     subs: [] },
-  { name: "Інші доходи",        icon: "💰", type: "income",   key: "other_income",  merchantKey: null,
+  { name: "Подарунки",         icon: "🎁", type: "variable", txKey: "gifts",         merchantKey: null,
+    subs: [] },
+  { name: "Інші витрати",      icon: "📦", type: "variable", txKey: "other",         merchantKey: null,
+    subs: [] },
+  // Доходи — txKey точно відповідає TX_CATEGORIES.income[n].id
+  { name: "Зарплата",          icon: "💼", type: "income",   txKey: "salary",        merchantKey: null,
+    subs: [] },
+  { name: "Фріланс",           icon: "💻", type: "income",   txKey: "freelance",     merchantKey: null,
+    subs: [] },
+  { name: "Бізнес",            icon: "🏪", type: "income",   txKey: "business",      merchantKey: null,
+    subs: [] },
+  { name: "Інвестиції",        icon: "📈", type: "income",   txKey: "invest",        merchantKey: null,
+    subs: [] },
+  { name: "Повернення",        icon: "↩️", type: "income",   txKey: "refund",        merchantKey: null,
+    subs: [] },
+  { name: "Інший дохід",       icon: "💰", type: "income",   txKey: "other_in",      merchantKey: null,
     subs: [] },
 ];
 
@@ -766,25 +782,44 @@ export default function BudgetPage() {
     })));
 
     // catKeyMap: category id → transaction category_key
+    // Стратегія (3 рівні):
+    // 1. color field = txKey (якщо категорію створено через seed або вручну з явним ключем)
+    // 2. Точний збіг назви з TX_CATEGORIES label (case-insensitive)
+    // 3. Fallback: нормалізована назва
+    const allTxCats = [...TX_CATEGORIES.expense, ...TX_CATEGORIES.income];
     const catKeyMap: Record<string, string> = {};
     cats?.forEach(c => {
+      // Рівень 1: color зберігає явний txKey
+      if (c.color && allTxCats.some(tc => tc.id === c.color)) {
+        catKeyMap[c.id] = c.color;
+        return;
+      }
+      // Рівень 2: точний збіг назви з TX_LABEL_TO_KEY
+      const nameKey = TX_LABEL_TO_KEY[c.name.toLowerCase()];
+      if (nameKey) {
+        catKeyMap[c.id] = nameKey;
+        return;
+      }
+      // Рівень 3: keyword fallback
       const n = c.name.toLowerCase();
-      // Expense keys
-      if      (n.includes("продукт") || n.includes("їжа") || n.includes("харч"))             catKeyMap[c.id] = "food";
-      else if (n.includes("кафе") || n.includes("ресторан") || n.includes("кав"))            catKeyMap[c.id] = "cafe";
-      else if (n.includes("авто") || n.includes("пальн") || n.includes("бензин"))            catKeyMap[c.id] = "fuel";
-      else if (n.includes("транспорт") || n.includes("метро") || n.includes("автобус"))      catKeyMap[c.id] = "transport";
-      else if (n.includes("здоров") || n.includes("медиц") || n.includes("аптек") || n.includes("лікар")) catKeyMap[c.id] = "health";
-      else if (n.includes("комунальн") || n.includes("оренд") || n.includes("кварт"))        catKeyMap[c.id] = "housing";
-      else if (n.includes("одяг") || n.includes("взутт"))                                    catKeyMap[c.id] = "clothes";
-      else if (n.includes("розваг") || n.includes("дозвілл") || n.includes("кіно"))          catKeyMap[c.id] = "entertainment";
-      else if (n.includes("зв'яз") || n.includes("телефон") || n.includes("мобільн"))        catKeyMap[c.id] = "telecom";
-      else if (n.includes("освіт") || n.includes("навчан") || n.includes("курс"))            catKeyMap[c.id] = "education";
-      // Income keys
-      else if (n.includes("зарплат") || n.includes("оклад") || n.includes("salary"))        catKeyMap[c.id] = "salary";
-      else if (n.includes("фріланс") || n.includes("freelance") || n.includes("підробіт"))  catKeyMap[c.id] = "freelance";
-      else if (n.includes("пасивн") || n.includes("дивіденд") || n.includes("відсотк"))     catKeyMap[c.id] = "passive";
-      else if (n.includes("інш") && c.type === "income")                                     catKeyMap[c.id] = "other_income";
+      if      (n.includes("продукт") || n.includes("їжа"))                               catKeyMap[c.id] = "food";
+      else if (n.includes("кафе") || n.includes("ресторан"))                             catKeyMap[c.id] = "cafe";
+      else if (n.includes("пальн") || n.includes("бензин") || n.includes("авто"))        catKeyMap[c.id] = "fuel";
+      else if (n.includes("транспорт") || n.includes("метро"))                           catKeyMap[c.id] = "transport";
+      else if (n.includes("здоров") || n.includes("медиц") || n.includes("аптек"))       catKeyMap[c.id] = "health";
+      else if (n.includes("комунальн") || n.includes("оренд"))                           catKeyMap[c.id] = "housing";
+      else if (n.includes("одяг") || n.includes("взутт"))                                catKeyMap[c.id] = "clothes";
+      else if (n.includes("розваг") || n.includes("кіно"))                               catKeyMap[c.id] = "entertainment";
+      else if (n.includes("освіт") || n.includes("навчан"))                              catKeyMap[c.id] = "education";
+      else if (n.includes("спорт"))                                                       catKeyMap[c.id] = "sport";
+      else if (n.includes("краса") || n.includes("beauty"))                              catKeyMap[c.id] = "beauty";
+      else if (n.includes("тварин") || n.includes("pets"))                               catKeyMap[c.id] = "pets";
+      else if (n.includes("зарплат") || n.includes("оклад"))                             catKeyMap[c.id] = "salary";
+      else if (n.includes("фріланс") || n.includes("підробіт"))                         catKeyMap[c.id] = "freelance";
+      else if (n.includes("бізнес") || n.includes("підприємс"))                         catKeyMap[c.id] = "business";
+      else if (n.includes("інвестиц"))                                                   catKeyMap[c.id] = "invest";
+      else if (n.includes("поверн"))                                                     catKeyMap[c.id] = "refund";
+      else if (n.includes("інш") && c.type === "income")                                catKeyMap[c.id] = "other_in";
       else catKeyMap[c.id] = n.replace(/\s+/g, "_");
     });
 
@@ -815,7 +850,8 @@ export default function BudgetPage() {
       const dc = DEFAULT_CATEGORIES[i];
       const { data: cat } = await supabase.from("categories").insert({
         user_id: user.id, name: dc.name, icon: dc.icon,
-        type: dc.type, color: "neutral", sort_order: i,
+        type: dc.type, color: dc.txKey, // зберігаємо txKey у полі color для надійного матчингу
+        sort_order: i,
       }).select().single();
       if (!cat) continue;
       if (dc.subs.length > 0) {
@@ -832,6 +868,24 @@ export default function BudgetPage() {
           }))
         );
       }
+    }
+    setSeeding(false);
+    load();
+  }
+
+  // Додає лише дохідні категорії (для користувачів, які вже мали seed без income)
+  async function seedIncomeCategories() {
+    setSeeding(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSeeding(false); return; }
+    const incomeDefs = DEFAULT_CATEGORIES.filter(dc => dc.type === "income");
+    const startOrder = categories.length;
+    for (let i = 0; i < incomeDefs.length; i++) {
+      const dc = incomeDefs[i];
+      await supabase.from("categories").insert({
+        user_id: user.id, name: dc.name, icon: dc.icon,
+        type: dc.type, color: dc.txKey, sort_order: startOrder + i,
+      });
     }
     setSeeding(false);
     load();
@@ -931,6 +985,23 @@ export default function BudgetPage() {
         </Card>
       ) : (
         <>
+          {/* Banner: є дохід але нема дохідних категорій */}
+          {tab === "budget" && totalIncome > 0 && !categories.some(c => c.type === "income") && (
+            <Card className="px-5 py-4 flex items-center gap-4 border-l-4 border-green-400">
+              <span className="text-2xl">💰</span>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                  Є дохідні транзакції на {totalIncome.toLocaleString("uk-UA")} грн, але категорій доходу немає
+                </p>
+                <p className="text-xs text-neutral-500 mt-0.5">Додайте дохідні категорії щоб побачити розбивку</p>
+              </div>
+              <button onClick={seedIncomeCategories} disabled={seeding}
+                className="shrink-0 px-4 py-2 rounded-xl bg-green-500 text-white text-sm font-semibold hover:bg-green-600 disabled:opacity-60 transition-all flex items-center gap-1.5">
+                {seeding && <Icon d={icons.loader} className="w-3.5 h-3.5 animate-spin" />}
+                Додати категорії доходу
+              </button>
+            </Card>
+          )}
           {tab === "budget"     && <BudgetTab categories={categories} onPlanChange={handlePlanChange} monthIdx={monthIdx} year={year} totalIncome={totalIncome} prevIncome={prevIncome} obligations={obligations} />}
           {tab === "categories" && <CategoriesTab categories={categories} onReload={load} />}
         </>
