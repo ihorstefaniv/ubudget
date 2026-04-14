@@ -170,34 +170,39 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
   const balance  = totalIncome - totalExpFact - obligationsTotal;
   const incDelta = delta(totalIncome, prevIncome);
 
-  // ── Рендер рядка витрат ──────────────────────────────────────
+  // ── Уніфікований рендер рядка (доходи + витрати) ─────────────
   const cols = "grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_0.8fr_0.8fr]";
 
-  const renderExpRow = (r: BudgetRowData) => {
+  const renderRow = (r: BudgetRowData, isIncome = false) => {
     const pct       = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
-    const remaining = r.plan - r.fact;
+    const remaining = isIncome ? r.fact - r.plan : r.plan - r.fact;
     const d         = delta(r.fact, r.prevFact);
-    const topM      = r.merchants.filter(m => m.is_selected).find(m => m.has_bonus)
-                   || r.merchants.find(m => m.is_selected);
+    // Топ заклад — тільки якщо є реальні транзакції
+    const topM      = r.fact > 0
+      ? (r.merchants.filter(m => m.is_selected).find(m => m.has_bonus) || r.merchants.find(m => m.is_selected))
+      : null;
+    const hasSelectedMerchants = r.fact > 0 && r.merchants.filter(m => m.is_selected).length > 0;
     const isExp = expandedMerchants.has(r.id);
 
     return (
       <div key={r.id}>
         <div className={`${cols} px-4 py-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors cursor-pointer group`}
-          onClick={() => r.merchants.filter(m => m.is_selected).length > 0 && toggleExpand(r.id)}>
+          onClick={() => hasSelectedMerchants && toggleExpand(r.id)}>
 
           <div className="flex items-center gap-2.5 min-w-0">
-            {r.merchants.filter(m => m.is_selected).length > 0
+            {hasSelectedMerchants
               ? <Icon d={isExp ? extraIcons.chevDown : extraIcons.chevRight} className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
               : <div className="w-3.5" />}
             <span className="text-base shrink-0">{r.emoji}</span>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">{r.label}</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <div className="h-1.5 w-16 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-                  <div className={`h-full rounded-full ${pctBg(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+              {!isIncome && r.plan > 0 && (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className="h-1.5 w-16 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                    <div className={`h-full rounded-full ${pctBg(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -214,22 +219,30 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
           </div>
 
           <div className="flex items-center">
-            <span className={`text-sm font-semibold tabular-nums ${r.fact > r.plan && r.plan > 0 ? "text-red-500" : "text-neutral-900 dark:text-neutral-100"}`}>
-              {fmt(r.fact)}
+            <span className={`text-sm font-semibold tabular-nums ${
+              isIncome ? "text-green-500" : (r.fact > r.plan && r.plan > 0 ? "text-red-500" : "text-neutral-900 dark:text-neutral-100")
+            }`}>
+              {isIncome && r.fact > 0 ? "+" : ""}{fmt(r.fact)}
             </span>
           </div>
 
           <div className="flex items-center gap-1">
             <span className="text-sm text-neutral-500 tabular-nums">{fmt(r.prevFact)}</span>
-            {d && <span className={`text-xs font-medium ${d.val > 0 ? "text-red-400" : "text-green-500"}`}>{d.label}</span>}
+            {d && <span className={`text-xs font-medium ${
+              isIncome ? (d.val >= 0 ? "text-green-500" : "text-red-400") : (d.val > 0 ? "text-red-400" : "text-green-500")
+            }`}>{d.label}</span>}
           </div>
 
           <div className="flex items-center">
-            <span className={`text-sm font-bold tabular-nums ${pctColor(pct)}`}>{pct}%</span>
+            <span className={`text-sm font-bold tabular-nums ${
+              isIncome ? (pct >= 100 ? "text-green-500" : "text-amber-500") : pctColor(pct)
+            }`}>{pct}%</span>
           </div>
 
           <div className="flex items-center">
-            <span className={`text-sm font-medium tabular-nums ${remaining < 0 ? "text-red-500" : "text-green-500"}`}>
+            <span className={`text-sm font-medium tabular-nums ${
+              isIncome ? (remaining >= 0 ? "text-green-500" : "text-amber-500") : (remaining < 0 ? "text-red-500" : "text-green-500")
+            }`}>
               {remaining < 0 ? "−" : "+"}{fmt(Math.abs(remaining))}
             </span>
           </div>
@@ -282,65 +295,7 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
         </Card>
       </div>
 
-      {/* Income table */}
-      {incRows.length > 0 && (
-        <Card>
-          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr] px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-green-50/60 dark:bg-green-950/10">
-            <div className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">💰 Доходи</div>
-            {["План","Факт","Попер. міс.","Залишок"].map(h => (
-              <div key={h} className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">{h}</div>
-            ))}
-          </div>
-          <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
-            {incRows.map(r => {
-              const rem = r.fact - r.plan;
-              const d   = delta(r.fact, r.prevFact);
-              const incCols = "grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr]";
-              return (
-                <div key={r.id} className={`${incCols} px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">{r.emoji}</span>
-                    <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{r.label}</span>
-                  </div>
-                  <div onClick={e => e.stopPropagation()}>
-                    <PlanCell value={r.plan} onChange={v => onPlanChange(r.id, v)} />
-                  </div>
-                  <span className="flex items-center text-sm font-semibold text-green-500 tabular-nums">+{fmt(r.fact)}</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm text-neutral-500 tabular-nums">{fmt(r.prevFact)}</span>
-                    {d && <span className={`text-xs ${d.val >= 0 ? "text-green-500" : "text-red-400"}`}>{d.label}</span>}
-                  </div>
-                  <span className={`flex items-center text-sm font-medium tabular-nums ${rem >= 0 ? "text-green-500" : "text-amber-500"}`}>
-                    {rem >= 0 ? "+" : "−"}{fmt(Math.abs(rem))}
-                  </span>
-                </div>
-              );
-            })}
-            {(() => {
-              const totalIncFact = incRows.reduce((s, r) => s + r.fact, 0);
-              const totalIncPlan = incRows.reduce((s, r) => s + r.plan, 0);
-              const totalIncPrev = incRows.reduce((s, r) => s + r.prevFact, 0);
-              const incD = delta(totalIncFact, totalIncPrev);
-              return (
-                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr] px-4 py-3 bg-green-50/40 dark:bg-green-950/10 border-t-2 border-green-100 dark:border-green-900/30">
-                  <p className="text-sm font-bold text-green-600 dark:text-green-400">Всього доходів</p>
-                  <p className="text-sm font-bold tabular-nums text-neutral-900 dark:text-neutral-100">{fmt(totalIncPlan)}</p>
-                  <p className="text-sm font-bold text-green-500 tabular-nums">+{fmt(totalIncFact)}</p>
-                  <div className="flex items-center gap-1">
-                    <p className="text-sm text-neutral-500 tabular-nums">{fmt(totalIncPrev)}</p>
-                    {incD && <span className={`text-xs ${incD.val >= 0 ? "text-green-500" : "text-red-400"}`}>{incD.label}</span>}
-                  </div>
-                  <p className={`text-sm font-bold tabular-nums ${totalIncFact >= totalIncPlan ? "text-green-500" : "text-amber-500"}`}>
-                    {totalIncFact >= totalIncPlan ? "+" : "−"}{fmt(Math.abs(totalIncFact - totalIncPlan))}
-                  </p>
-                </div>
-              );
-            })()}
-          </div>
-        </Card>
-      )}
-
-      {/* Expense table */}
+      {/* Єдина таблиця: Доходи + Витрати */}
       <Card>
         <div className={`${cols} px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-800/40`}>
           {["Категорія","Топ заклад","План","Факт","Попер. міс.","%","Залишок"].map(h => (
@@ -348,11 +303,53 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
           ))}
         </div>
         <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
-          {expRows.map(renderExpRow)}
-          {/* Total */}
+
+          {/* ── Доходи ─────────────────────────────────────── */}
+          {incRows.length > 0 && (
+            <>
+              <div className={`${cols} px-4 py-2.5 bg-green-50/60 dark:bg-green-950/10`}>
+                <div className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">💰 Доходи</div>
+                {[...Array(6)].map((_, i) => <div key={i} />)}
+              </div>
+              {incRows.map(r => renderRow(r, true))}
+              {incRows.length > 1 && (() => {
+                const tFact = incRows.reduce((s, r) => s + r.fact, 0);
+                const tPlan = incRows.reduce((s, r) => s + r.plan, 0);
+                const tPrev = incRows.reduce((s, r) => s + r.prevFact, 0);
+                const tPct  = tPlan > 0 ? Math.round(tFact / tPlan * 100) : 0;
+                const tD    = delta(tFact, tPrev);
+                return (
+                  <div className={`${cols} px-4 py-3 bg-green-50/30 dark:bg-green-950/5`}>
+                    <div className="flex items-center gap-2 pl-4">
+                      <p className="text-sm font-bold text-green-600 dark:text-green-400">Всього доходів</p>
+                    </div>
+                    <div />
+                    <p className="text-sm font-bold tabular-nums text-neutral-900 dark:text-neutral-100">{fmt(tPlan)}</p>
+                    <p className="text-sm font-bold text-green-500 tabular-nums">+{fmt(tFact)}</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm text-neutral-500 tabular-nums">{fmt(tPrev)}</p>
+                      {tD && <span className={`text-xs ${tD.val >= 0 ? "text-green-500" : "text-red-400"}`}>{tD.label}</span>}
+                    </div>
+                    <p className={`text-sm font-bold tabular-nums ${tPct >= 100 ? "text-green-500" : "text-amber-500"}`}>{tPct}%</p>
+                    <p className={`text-sm font-bold tabular-nums ${tFact >= tPlan ? "text-green-500" : "text-amber-500"}`}>
+                      {tFact >= tPlan ? "+" : "−"}{fmt(Math.abs(tFact - tPlan))}
+                    </p>
+                  </div>
+                );
+              })()}
+            </>
+          )}
+
+          {/* ── Витрати ─────────────────────────────────────── */}
+          <div className={`${cols} px-4 py-2.5 bg-neutral-100/60 dark:bg-neutral-800/60`}>
+            <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">💸 Витрати</div>
+            {[...Array(6)].map((_, i) => <div key={i} />)}
+          </div>
+          {expRows.map(r => renderRow(r, false))}
+
+          {/* Expense total */}
           <div className={`${cols} px-4 py-3.5 bg-neutral-50 dark:bg-neutral-800/40 border-t-2 border-neutral-200 dark:border-neutral-700`}>
-            <div className="flex items-center gap-2">
-              <div className="w-3.5" />
+            <div className="flex items-center gap-2 pl-4">
               <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100">Всього витрат</p>
             </div>
             <div />
@@ -368,7 +365,8 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
             </p>
           </div>
         </div>
-        {/* Toggle hidden categories */}
+
+        {/* Toggle hidden expense categories */}
         {hiddenCount > 0 && (
           <button onClick={() => setShowAllExpense(v => !v)}
             className="w-full py-2.5 text-xs text-neutral-400 hover:text-orange-400 border-t border-neutral-100 dark:border-neutral-800 transition-colors flex items-center justify-center gap-1.5">
