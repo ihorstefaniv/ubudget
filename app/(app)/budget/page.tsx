@@ -556,10 +556,10 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">Заклади та підкатегорії для кожної категорії</p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">Категорії, підкатегорії та заклади</p>
         <button onClick={() => setAddCatOpen(v => !v)}
           className="flex items-center gap-1.5 text-sm text-orange-400 hover:text-orange-500 font-medium transition-colors">
-          <Icon d={icons.plus} className="w-4 h-4" />Додати групу
+          <Icon d={icons.plus} className="w-4 h-4" />Категорія
         </button>
       </div>
 
@@ -986,7 +986,7 @@ export default function BudgetPage() {
       </div>
 
       <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800/50 p-1 rounded-2xl w-fit">
-        {[{ id: "budget" as Tab, label: "📊 Бюджет" }, { id: "categories" as Tab, label: "🏪 Заклади" }].map(({ id, label }) => (
+        {[{ id: "budget" as Tab, label: "📊 Бюджет" }, { id: "categories" as Tab, label: "🗂 Категорії" }].map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-5 py-2 rounded-xl text-sm font-medium transition-all ${tab === id ? "bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 shadow-sm" : "text-neutral-500 dark:text-neutral-400"}`}>
             {label}
