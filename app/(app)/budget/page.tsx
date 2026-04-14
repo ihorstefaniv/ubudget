@@ -3,11 +3,16 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Card } from "@/components/ui";
-import { TX_CATEGORIES, TX_LABEL_TO_KEY } from "@/lib/categories";
+import {
+  CATEGORY_REGISTRY, INCOME_CATEGORIES, EXPENSE_CATEGORIES,
+  TX_CATEGORIES, getCategoryDef,
+  type CategoryDef,
+} from "@/lib/category-registry";
 
 type Tab = "budget" | "categories";
 type CategoryType = "fixed" | "variable" | "bonus" | "income";
 
+// ─── DB Interfaces ────────────────────────────────────────────
 interface DBCategory {
   id: string; user_id: string; name: string; icon: string;
   type: string; color: string; sort_order: number;
@@ -19,17 +24,16 @@ interface DBMerchant {
   id: string; category_id: string; name: string; has_bonus: boolean;
   bonus_percent: number | null; bonus_label: string | null; is_selected: boolean; is_custom: boolean;
 }
-interface DBBudget {
-  id: string; category_id: string; plan_amount: number; month: number; year: number;
-}
-
+// Category — тільки для CategoriesTab (CRUD-менеджмент заkladів/підкатегорій)
 interface Category extends DBCategory {
-  plan: number; fact: number; prevFact: number;
-  subcategories: (DBSubcategory & { plan: number; fact: number; prevFact: number })[];
+  subcategories: (DBSubcategory & { sort_order: number })[];
   merchants: DBMerchant[];
 }
+interface Obligation { name: string; monthly_payment: number; type: string; }
 
 // ─── Helpers ──────────────────────────────────────────────────
+const REGISTRY_KEY_SET = new Set(CATEGORY_REGISTRY.map(c => c.id));
+
 function fmt(n: number) {
   return Math.abs(n).toLocaleString("uk-UA", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " грн";
 }
@@ -40,10 +44,8 @@ function delta(curr: number, prev: number) {
   const d = Math.round((curr - prev) / prev * 100);
   return { val: d, label: `${d >= 0 ? "+" : ""}${d}%` };
 }
-
 const MONTHS = ["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
 
-// ─── Extra icons (не в бібліотеці) ───────────────────────────
 const extraIcons = {
   chevDown:  "M19 9l-7 7-7-7",
   chevRight: "M9 5l7 7-7 7",
@@ -51,7 +53,6 @@ const extraIcons = {
   copy:      "M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z",
   drag:      "M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01",
 };
-
 const EMOJIS = ["🛒","☕","⛽","🚗","💊","💡","👔","🏠","🎮","✈️","📚","💪","🐾","🎁","💈","🎨","🍔","🍕","🛍","🏋️","🎭","🎵","🌿","🔧","🏦","📱","💻","🎓","🏥","🍷","🧴","🎯","🚿","🛁","🪴"];
 
 function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string) => void }) {
@@ -82,7 +83,6 @@ function PlanCell({ value, onChange }: { value: number; onChange: (v: number) =>
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(value.toString());
   const ref = useRef<HTMLInputElement>(null);
-
   if (editing) return (
     <input ref={ref} autoFocus value={val}
       onChange={e => setVal(e.target.value)}
@@ -93,7 +93,6 @@ function PlanCell({ value, onChange }: { value: number; onChange: (v: number) =>
       }}
       className="w-24 px-2 py-1 rounded-lg border border-orange-300 bg-orange-50 dark:bg-orange-950/20 text-sm text-right font-medium focus:outline-none text-neutral-900 dark:text-neutral-100" />
   );
-
   return (
     <button onClick={() => { setVal(value.toString()); setEditing(true); }}
       className="text-sm font-medium text-neutral-900 dark:text-neutral-100 hover:text-orange-500 transition-colors tabular-nums group flex items-center gap-1">
@@ -103,34 +102,158 @@ function PlanCell({ value, onChange }: { value: number; onChange: (v: number) =>
   );
 }
 
-interface Obligation { name: string; monthly_payment: number; type: string; }
-
 // ─── BUDGET TAB ───────────────────────────────────────────────
-function BudgetTab({ categories, onPlanChange, monthIdx, year, totalIncome, prevIncome, obligations }: {
-  categories: Category[];
-  onPlanChange: (catId: string, val: number, month: number, year: number) => void;
+// Рядки будуються з CATEGORY_REGISTRY (не з БД-категорій).
+// factMap / planMap — ключ = category_key з транзакцій/бюджетів.
+type BudgetRowData = CategoryDef & {
+  fact: number; prevFact: number; plan: number;
+  merchants: DBMerchant[];
+};
+
+function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
+  monthIdx, year, totalIncome, prevIncome, obligations,
+}: {
+  factMap: Record<string, number>;
+  prevFactMap: Record<string, number>;
+  planMap: Record<string, number>;
+  merchantMap: Record<string, DBMerchant[]>;
+  onPlanChange: (key: string, val: number) => void;
   monthIdx: number; year: number;
   totalIncome: number; prevIncome: number;
   obligations: Obligation[];
 }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggle = (id: string) => setExpanded(prev => {
+  const [showAllExpense, setShowAllExpense] = useState(false);
+  const [expandedMerchants, setExpandedMerchants] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) => setExpandedMerchants(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
   });
 
-  const totalPlan  = categories.reduce((s, c) => s + c.plan, 0);
-  const totalFact  = categories.reduce((s, c) => s + c.fact, 0);
-  const totalPrev  = categories.reduce((s, c) => s + c.prevFact, 0);
-  const totalPct   = totalPlan > 0 ? Math.round(totalFact / totalPlan * 100) : 0;
-  const totalDelta = delta(totalFact, totalPrev);
+  // ── Income rows (тільки де є факт або план) ────────────────
+  const incRows: BudgetRowData[] = INCOME_CATEGORIES.map(c => ({
+    ...c,
+    fact:      factMap[c.id]     ?? 0,
+    prevFact:  prevFactMap[c.id] ?? 0,
+    plan:      planMap[c.id]     ?? 0,
+    merchants: merchantMap[c.id] ?? [],
+  })).filter(r => r.fact > 0 || r.plan > 0);
+
+  // ── Expense rows (всі + "Без категорії" якщо є) ──────────────
+  const allExpRows: BudgetRowData[] = [
+    ...EXPENSE_CATEGORIES.map(c => ({
+      ...c,
+      fact:      factMap[c.id]     ?? 0,
+      prevFact:  prevFactMap[c.id] ?? 0,
+      plan:      planMap[c.id]     ?? 0,
+      merchants: merchantMap[c.id] ?? [],
+    })),
+    ...((factMap["uncategorized"] ?? 0) > 0 ? [{
+      ...getCategoryDef("uncategorized"),
+      fact:      factMap["uncategorized"],
+      prevFact:  prevFactMap["uncategorized"] ?? 0,
+      plan:      planMap["uncategorized"]     ?? 0,
+      merchants: [] as DBMerchant[],
+    }] : []),
+  ];
+
+  const activeExpRows = allExpRows.filter(r => r.fact > 0 || r.plan > 0);
+  const expRows       = showAllExpense ? allExpRows : activeExpRows;
+  const hiddenCount   = allExpRows.length - activeExpRows.length;
+
+  const totalExpFact  = activeExpRows.reduce((s, r) => s + r.fact, 0);
+  const totalExpPlan  = activeExpRows.reduce((s, r) => s + r.plan, 0);
+  const totalExpPrev  = activeExpRows.reduce((s, r) => s + r.prevFact, 0);
+  const totalExpPct   = totalExpPlan > 0 ? Math.round(totalExpFact / totalExpPlan * 100) : 0;
+  const totalExpDelta = delta(totalExpFact, totalExpPrev);
 
   const obligationsTotal = obligations.reduce((s, o) => s + Number(o.monthly_payment), 0);
-  const balance = totalIncome - totalFact - obligationsTotal;
+  const balance  = totalIncome - totalExpFact - obligationsTotal;
   const incDelta = delta(totalIncome, prevIncome);
+
+  // ── Рендер рядка витрат ──────────────────────────────────────
+  const cols = "grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_0.8fr_0.8fr]";
+
+  const renderExpRow = (r: BudgetRowData) => {
+    const pct       = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
+    const remaining = r.plan - r.fact;
+    const d         = delta(r.fact, r.prevFact);
+    const topM      = r.merchants.filter(m => m.is_selected).find(m => m.has_bonus)
+                   || r.merchants.find(m => m.is_selected);
+    const isExp = expandedMerchants.has(r.id);
+
+    return (
+      <div key={r.id}>
+        <div className={`${cols} px-4 py-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors cursor-pointer group`}
+          onClick={() => r.merchants.filter(m => m.is_selected).length > 0 && toggleExpand(r.id)}>
+
+          <div className="flex items-center gap-2.5 min-w-0">
+            {r.merchants.filter(m => m.is_selected).length > 0
+              ? <Icon d={isExp ? extraIcons.chevDown : extraIcons.chevRight} className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
+              : <div className="w-3.5" />}
+            <span className="text-base shrink-0">{r.emoji}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">{r.label}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="h-1.5 w-16 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                  <div className={`h-full rounded-full ${pctBg(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center" onClick={e => e.stopPropagation()}>
+            {topM ? (
+              <span className={`text-xs px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${topM.has_bonus ? "bg-green-50 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
+                {topM.has_bonus && "🎁"} {topM.name}
+              </span>
+            ) : <span className="text-xs text-neutral-300">—</span>}
+          </div>
+
+          <div onClick={e => e.stopPropagation()}>
+            <PlanCell value={r.plan} onChange={v => onPlanChange(r.id, v)} />
+          </div>
+
+          <div className="flex items-center">
+            <span className={`text-sm font-semibold tabular-nums ${r.fact > r.plan && r.plan > 0 ? "text-red-500" : "text-neutral-900 dark:text-neutral-100"}`}>
+              {fmt(r.fact)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span className="text-sm text-neutral-500 tabular-nums">{fmt(r.prevFact)}</span>
+            {d && <span className={`text-xs font-medium ${d.val > 0 ? "text-red-400" : "text-green-500"}`}>{d.label}</span>}
+          </div>
+
+          <div className="flex items-center">
+            <span className={`text-sm font-bold tabular-nums ${pctColor(pct)}`}>{pct}%</span>
+          </div>
+
+          <div className="flex items-center">
+            <span className={`text-sm font-medium tabular-nums ${remaining < 0 ? "text-red-500" : "text-green-500"}`}>
+              {remaining < 0 ? "−" : "+"}{fmt(Math.abs(remaining))}
+            </span>
+          </div>
+        </div>
+
+        {isExp && (
+          <div className="px-14 py-2 bg-blue-50/30 dark:bg-blue-950/10 border-t border-blue-100/50 dark:border-blue-900/20">
+            <p className="text-xs text-neutral-400 mb-1.5">Заклади:</p>
+            <div className="flex flex-wrap gap-2">
+              {r.merchants.filter(m => m.is_selected).map(m => (
+                <span key={m.id} className={`text-xs px-2.5 py-1 rounded-lg font-medium ${m.has_bonus ? "bg-green-100 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
+                  {m.has_bonus && "🎁 "}{m.name}{m.has_bonus && m.bonus_percent ? ` ${m.bonus_percent}%` : ""}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
-      {/* Income + Expenses summary */}
+      {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4">
           <p className="text-lg font-bold text-green-500">{fmt(totalIncome)}</p>
@@ -138,18 +261,18 @@ function BudgetTab({ categories, onPlanChange, monthIdx, year, totalIncome, prev
           <p className="text-xs text-neutral-400 mt-1">Дохід за місяць</p>
         </Card>
         <Card className="p-4">
-          <p className={`text-lg font-bold ${totalFact > totalPlan ? "text-red-500" : "text-orange-500"}`}>{fmt(totalFact)}</p>
-          <p className="text-xs text-neutral-400 mt-1">Витрачено факт / план {fmt(totalPlan)}</p>
+          <p className={`text-lg font-bold ${totalExpFact > totalExpPlan && totalExpPlan > 0 ? "text-red-500" : "text-orange-500"}`}>{fmt(totalExpFact)}</p>
+          <p className="text-xs text-neutral-400 mt-1">Витрачено факт / план {fmt(totalExpPlan)}</p>
         </Card>
         {obligationsTotal > 0 ? (
           <Card className="p-4">
             <p className="text-lg font-bold text-blue-500">{fmt(obligationsTotal)}</p>
-            <p className="text-xs text-neutral-400 mt-1">Зобов'язання ({obligations.length} платежів)</p>
+            <p className="text-xs text-neutral-400 mt-1">Зобов'язання ({obligations.length})</p>
           </Card>
         ) : (
           <Card className="p-4">
-            <p className={`text-lg font-bold text-neutral-500`}>{fmt(totalPrev)}</p>
-            {totalDelta && <p className={`text-xs font-medium mt-0.5 ${totalDelta.val > 0 ? "text-red-400" : "text-green-500"}`}>{totalDelta.label} до пп</p>}
+            <p className="text-lg font-bold text-neutral-500">{fmt(totalExpPrev)}</p>
+            {totalExpDelta && <p className={`text-xs font-medium mt-0.5 ${totalExpDelta.val > 0 ? "text-red-400" : "text-green-500"}`}>{totalExpDelta.label} до пп</p>}
             <p className="text-xs text-neutral-400 mt-1">Попередній місяць</p>
           </Card>
         )}
@@ -159,195 +282,103 @@ function BudgetTab({ categories, onPlanChange, monthIdx, year, totalIncome, prev
         </Card>
       </div>
 
-      {/* Table */}
-      {(() => {
-        const incomeCats  = categories.filter(c => c.type === "income");
-        const expenseCats = categories.filter(c => c.type !== "income");
-        const cols = "grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_0.8fr_0.8fr]";
-        const headers = ["Категорія","Топ заклад","План","Факт","Попер. міс.","%","Залишок"];
-
-        const renderCatRow = (cat: Category) => {
-          const pct       = cat.plan > 0 ? Math.round(cat.fact / cat.plan * 100) : 0;
-          const remaining = cat.plan - cat.fact;
-          const d         = delta(cat.fact, cat.prevFact);
-          const topM      = cat.merchants.filter(m => m.is_selected).find(m => m.has_bonus) || cat.merchants.find(m => m.is_selected);
-          const isExpanded = expanded.has(cat.id);
-          const isIncome   = cat.type === "income";
-          const sign       = isIncome ? "+" : (remaining < 0 ? "−" : "+");
-          const remColor   = isIncome
-            ? (cat.fact >= cat.plan ? "text-green-500" : "text-amber-500")
-            : (remaining < 0 ? "text-red-500" : "text-green-500");
-
-          return (
-            <div key={cat.id}>
-              <div className={`${cols} px-4 py-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors cursor-pointer group`}
-                onClick={() => cat.subcategories.length > 0 && toggle(cat.id)}>
-
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {cat.subcategories.length > 0
-                    ? <Icon d={isExpanded ? extraIcons.chevDown : extraIcons.chevRight} className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
-                    : <div className="w-3.5" />}
-                  <span className="text-base shrink-0">{cat.icon}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">{cat.name}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <div className="h-1.5 w-16 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-                        <div className={`h-full rounded-full ${isIncome ? "bg-green-400" : pctBg(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                      </div>
-                      <span className={`text-xs font-medium ${cat.type === "fixed" ? "text-blue-400" : cat.type === "bonus" ? "text-pink-400" : cat.type === "income" ? "text-green-500" : "text-neutral-400"}`}>
-                        {cat.type === "fixed" ? "🔒 фікс." : cat.type === "bonus" ? "🎁 бонус" : cat.type === "income" ? "💰 дохід" : "📅 змінна"}
-                      </span>
-                    </div>
+      {/* Income table */}
+      {incRows.length > 0 && (
+        <Card>
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr] px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-green-50/60 dark:bg-green-950/10">
+            <div className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">💰 Доходи</div>
+            {["План","Факт","Попер. міс.","Залишок"].map(h => (
+              <div key={h} className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">{h}</div>
+            ))}
+          </div>
+          <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
+            {incRows.map(r => {
+              const rem = r.fact - r.plan;
+              const d   = delta(r.fact, r.prevFact);
+              const incCols = "grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr]";
+              return (
+                <div key={r.id} className={`${incCols} px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{r.emoji}</span>
+                    <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{r.label}</span>
                   </div>
-                </div>
-
-                <div className="flex items-center" onClick={e => e.stopPropagation()}>
-                  {topM ? (
-                    <span className={`text-xs px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${topM.has_bonus ? "bg-green-50 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
-                      {topM.has_bonus && "🎁"} {topM.name}
-                    </span>
-                  ) : <span className="text-xs text-neutral-300">—</span>}
-                </div>
-
-                <div onClick={e => e.stopPropagation()}>
-                  <PlanCell value={cat.plan} onChange={v => onPlanChange(cat.id, v, monthIdx + 1, year)} />
-                </div>
-
-                <div className="flex items-center">
-                  <span className={`text-sm font-semibold tabular-nums ${isIncome ? "text-green-500" : cat.fact > cat.plan ? "text-red-500" : "text-neutral-900 dark:text-neutral-100"}`}>
-                    {isIncome && cat.fact > 0 ? "+" : ""}{fmt(cat.fact)}
+                  <div onClick={e => e.stopPropagation()}>
+                    <PlanCell value={r.plan} onChange={v => onPlanChange(r.id, v)} />
+                  </div>
+                  <span className="flex items-center text-sm font-semibold text-green-500 tabular-nums">+{fmt(r.fact)}</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm text-neutral-500 tabular-nums">{fmt(r.prevFact)}</span>
+                    {d && <span className={`text-xs ${d.val >= 0 ? "text-green-500" : "text-red-400"}`}>{d.label}</span>}
+                  </div>
+                  <span className={`flex items-center text-sm font-medium tabular-nums ${rem >= 0 ? "text-green-500" : "text-amber-500"}`}>
+                    {rem >= 0 ? "+" : "−"}{fmt(Math.abs(rem))}
                   </span>
                 </div>
-
-                <div className="flex items-center gap-1">
-                  <span className="text-sm text-neutral-500 tabular-nums">{fmt(cat.prevFact)}</span>
-                  {d && <span className={`text-xs font-medium ${isIncome ? (d.val >= 0 ? "text-green-500" : "text-red-400") : (d.val > 0 ? "text-red-400" : "text-green-500")}`}>{d.label}</span>}
-                </div>
-
-                <div className="flex items-center">
-                  <span className={`text-sm font-bold tabular-nums ${pctColor(pct)}`}>{pct}%</span>
-                </div>
-
-                <div className="flex items-center">
-                  <span className={`text-sm font-medium tabular-nums ${remColor}`}>
-                    {sign}{fmt(Math.abs(isIncome ? cat.fact - cat.plan : remaining))}
-                  </span>
-                </div>
-              </div>
-
-              {isExpanded && cat.subcategories.map(sub => {
-                const sPct = sub.plan > 0 ? Math.round(sub.fact / sub.plan * 100) : 0;
-                const sRem = sub.plan - sub.fact;
-                const sd   = delta(sub.fact, sub.prevFact);
-                return (
-                  <div key={sub.id} className={`${cols} px-4 py-2.5 bg-neutral-50/50 dark:bg-neutral-800/20 border-t border-neutral-100/50 dark:border-neutral-800/30`}>
-                    <div className="flex items-center gap-2.5 pl-6">
-                      <span className="text-sm shrink-0">{sub.icon}</span>
-                      <p className="text-xs text-neutral-600 dark:text-neutral-400">{sub.name}</p>
-                    </div>
-                    <div />
-                    <div className="flex items-center"><span className="text-xs text-neutral-500 tabular-nums">{fmt(sub.plan)}</span></div>
-                    <div className="flex items-center"><span className={`text-xs font-medium tabular-nums ${sub.fact > sub.plan ? "text-red-400" : "text-neutral-700 dark:text-neutral-300"}`}>{fmt(sub.fact)}</span></div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-neutral-400 tabular-nums">{fmt(sub.prevFact)}</span>
-                      {sd && <span className={`text-xs ${sd.val > 0 ? "text-red-400" : "text-green-500"}`}>{sd.label}</span>}
-                    </div>
-                    <div className="flex items-center"><span className={`text-xs font-medium ${pctColor(sPct)}`}>{sPct}%</span></div>
-                    <div className="flex items-center"><span className={`text-xs tabular-nums ${sRem < 0 ? "text-red-400" : "text-green-500"}`}>{sRem < 0 ? "−" : "+"}{fmt(sRem)}</span></div>
-                  </div>
-                );
-              })}
-
-              {isExpanded && cat.merchants.filter(m => m.is_selected).length > 0 && (
-                <div className="px-14 py-2 bg-blue-50/30 dark:bg-blue-950/10 border-t border-blue-100/50 dark:border-blue-900/20">
-                  <p className="text-xs text-neutral-400 mb-1.5">Заклади:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {cat.merchants.filter(m => m.is_selected).map(m => (
-                      <span key={m.id} className={`text-xs px-2.5 py-1 rounded-lg font-medium ${m.has_bonus ? "bg-green-100 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
-                        {m.has_bonus && "🎁 "}{m.name}{m.has_bonus && m.bonus_percent ? ` ${m.bonus_percent}%` : ""}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        };
-
-        return (
-          <>
-            {/* Income table */}
-            {incomeCats.length > 0 && (() => {
-              const totalIncPlan = incomeCats.reduce((s, c) => s + c.plan, 0);
-              const totalIncFact = incomeCats.reduce((s, c) => s + c.fact, 0);
-              const totalIncPrev = incomeCats.reduce((s, c) => s + c.prevFact, 0);
+              );
+            })}
+            {(() => {
+              const totalIncFact = incRows.reduce((s, r) => s + r.fact, 0);
+              const totalIncPlan = incRows.reduce((s, r) => s + r.plan, 0);
+              const totalIncPrev = incRows.reduce((s, r) => s + r.prevFact, 0);
               const incD = delta(totalIncFact, totalIncPrev);
               return (
-                <Card>
-                  <div className={`${cols} px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-green-50/60 dark:bg-green-950/10`}>
-                    <div className="col-span-2 text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">💰 Доходи</div>
-                    {["План","Факт","Попер. міс.","%","Залишок"].map(h => (
-                      <div key={h} className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">{h}</div>
-                    ))}
-                  </div>
-                  <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
-                    {incomeCats.map(renderCatRow)}
-                    <div className={`${cols} px-4 py-3.5 bg-green-50/40 dark:bg-green-950/10 border-t-2 border-green-100 dark:border-green-900/30`}>
-                      <div className="flex items-center gap-2 col-span-2">
-                        <div className="w-3.5" />
-                        <p className="text-sm font-bold text-green-600 dark:text-green-400">Всього доходів</p>
-                      </div>
-                      <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100 tabular-nums">{fmt(totalIncPlan)}</p>
-                      <p className="text-sm font-bold text-green-500 tabular-nums">+{fmt(totalIncFact)}</p>
-                      <div className="flex items-center gap-1">
-                        <p className="text-sm font-medium text-neutral-500 tabular-nums">{fmt(totalIncPrev)}</p>
-                        {incD && <span className={`text-xs font-medium ${incD.val >= 0 ? "text-green-500" : "text-red-400"}`}>{incD.label}</span>}
-                      </div>
-                      <div />
-                      <p className={`text-sm font-bold tabular-nums ${totalIncFact >= totalIncPlan ? "text-green-500" : "text-amber-500"}`}>
-                        {totalIncFact >= totalIncPlan ? "+" : "−"}{fmt(Math.abs(totalIncFact - totalIncPlan))}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })()}
-
-            {/* Expense table */}
-            <Card>
-              <div className={`${cols} px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-800/40`}>
-                {headers.map(h => (
-                  <div key={h} className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">{h}</div>
-                ))}
-              </div>
-
-              <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
-                {expenseCats.map(renderCatRow)}
-                {/* Total row */}
-                <div className={`${cols} px-4 py-3.5 bg-neutral-50 dark:bg-neutral-800/40 border-t-2 border-neutral-200 dark:border-neutral-700`}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3.5" />
-                    <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100">Всього витрат</p>
-                  </div>
-                  <div />
-                  <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100 tabular-nums">{fmt(totalPlan)}</p>
-                  <p className={`text-sm font-bold tabular-nums ${totalFact > totalPlan ? "text-red-500" : "text-orange-500"}`}>{fmt(totalFact)}</p>
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_0.8fr] px-4 py-3 bg-green-50/40 dark:bg-green-950/10 border-t-2 border-green-100 dark:border-green-900/30">
+                  <p className="text-sm font-bold text-green-600 dark:text-green-400">Всього доходів</p>
+                  <p className="text-sm font-bold tabular-nums text-neutral-900 dark:text-neutral-100">{fmt(totalIncPlan)}</p>
+                  <p className="text-sm font-bold text-green-500 tabular-nums">+{fmt(totalIncFact)}</p>
                   <div className="flex items-center gap-1">
-                    <p className="text-sm font-medium text-neutral-500 tabular-nums">{fmt(totalPrev)}</p>
-                    {totalDelta && <span className={`text-xs font-medium ${totalDelta.val > 0 ? "text-red-400" : "text-green-500"}`}>{totalDelta.label}</span>}
+                    <p className="text-sm text-neutral-500 tabular-nums">{fmt(totalIncPrev)}</p>
+                    {incD && <span className={`text-xs ${incD.val >= 0 ? "text-green-500" : "text-red-400"}`}>{incD.label}</span>}
                   </div>
-                  <p className={`text-sm font-bold tabular-nums ${pctColor(totalPct)}`}>{totalPct}%</p>
-                  <p className={`text-sm font-bold tabular-nums ${totalFact > totalPlan ? "text-red-500" : "text-green-500"}`}>
-                    {totalFact > totalPlan ? "−" : "+"}{fmt(Math.abs(totalPlan - totalFact))}
+                  <p className={`text-sm font-bold tabular-nums ${totalIncFact >= totalIncPlan ? "text-green-500" : "text-amber-500"}`}>
+                    {totalIncFact >= totalIncPlan ? "+" : "−"}{fmt(Math.abs(totalIncFact - totalIncPlan))}
                   </p>
                 </div>
-              </div>
-            </Card>
-          </>
-        );
-      })()}
+              );
+            })()}
+          </div>
+        </Card>
+      )}
 
-      {/* Obligations from credits */}
+      {/* Expense table */}
+      <Card>
+        <div className={`${cols} px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-800/40`}>
+          {["Категорія","Топ заклад","План","Факт","Попер. міс.","%","Залишок"].map(h => (
+            <div key={h} className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">{h}</div>
+          ))}
+        </div>
+        <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
+          {expRows.map(renderExpRow)}
+          {/* Total */}
+          <div className={`${cols} px-4 py-3.5 bg-neutral-50 dark:bg-neutral-800/40 border-t-2 border-neutral-200 dark:border-neutral-700`}>
+            <div className="flex items-center gap-2">
+              <div className="w-3.5" />
+              <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100">Всього витрат</p>
+            </div>
+            <div />
+            <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100 tabular-nums">{fmt(totalExpPlan)}</p>
+            <p className={`text-sm font-bold tabular-nums ${totalExpFact > totalExpPlan && totalExpPlan > 0 ? "text-red-500" : "text-orange-500"}`}>{fmt(totalExpFact)}</p>
+            <div className="flex items-center gap-1">
+              <p className="text-sm font-medium text-neutral-500 tabular-nums">{fmt(totalExpPrev)}</p>
+              {totalExpDelta && <span className={`text-xs font-medium ${totalExpDelta.val > 0 ? "text-red-400" : "text-green-500"}`}>{totalExpDelta.label}</span>}
+            </div>
+            <p className={`text-sm font-bold tabular-nums ${pctColor(totalExpPct)}`}>{totalExpPct}%</p>
+            <p className={`text-sm font-bold tabular-nums ${totalExpFact > totalExpPlan && totalExpPlan > 0 ? "text-red-500" : "text-green-500"}`}>
+              {totalExpFact > totalExpPlan ? "−" : "+"}{fmt(Math.abs(totalExpPlan - totalExpFact))}
+            </p>
+          </div>
+        </div>
+        {/* Toggle hidden categories */}
+        {hiddenCount > 0 && (
+          <button onClick={() => setShowAllExpense(v => !v)}
+            className="w-full py-2.5 text-xs text-neutral-400 hover:text-orange-400 border-t border-neutral-100 dark:border-neutral-800 transition-colors flex items-center justify-center gap-1.5">
+            <Icon d={showAllExpense ? extraIcons.chevDown : extraIcons.chevRight} className="w-3.5 h-3.5" />
+            {showAllExpense ? "Сховати порожні категорії" : `Показати всі (ще ${hiddenCount} без даних)`}
+          </button>
+        )}
+      </Card>
+
+      {/* Obligations */}
       {obligations.length > 0 && (
         <Card className="p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -373,14 +404,18 @@ function BudgetTab({ categories, onPlanChange, monthIdx, year, totalIncome, prev
         </Card>
       )}
 
-      {/* Bonus summary */}
+      {/* Bonuses */}
       {(() => {
-        const bonuses = categories.flatMap(cat =>
-          cat.merchants.filter(m => m.is_selected && m.has_bonus && m.bonus_percent).map(m => ({
-            merchant: m.name, category: cat.name, bonusLabel: m.bonus_label || "",
-            earned: Math.round(cat.fact * (m.bonus_percent || 0) / 100),
-          }))
-        ).filter(b => b.earned > 0);
+        const bonuses = Object.entries(merchantMap).flatMap(([key, merchants]) => {
+          const regCat = getCategoryDef(key);
+          const fact   = factMap[key] ?? 0;
+          return merchants
+            .filter(m => m.is_selected && m.has_bonus && m.bonus_percent && fact > 0)
+            .map(m => ({
+              merchant: m.name, category: regCat.label, bonusLabel: m.bonus_label || "",
+              earned: Math.round(fact * (m.bonus_percent || 0) / 100),
+            }));
+        }).filter(b => b.earned > 0);
         if (!bonuses.length) return null;
         return (
           <Card className="p-5">
@@ -418,66 +453,16 @@ const MERCHANT_PRESETS: Record<string, { name: string; has_bonus: boolean; bonus
   fuel:      [{ name: "ОККО", has_bonus: true, bonus_percent: 3, bonus_label: "Fishka бали" }, { name: "WOG", has_bonus: true, bonus_percent: 2, bonus_label: "WOG Club" }, { name: "UPG", has_bonus: false }, { name: "Shell", has_bonus: true, bonus_percent: 2, bonus_label: "Shell ClubSmart" }],
   transport: [{ name: "Uber", has_bonus: false }, { name: "Bolt", has_bonus: false }, { name: "Укрзалізниця", has_bonus: false }],
   health:    [{ name: "Аптека Доброго Дня", has_bonus: true, bonus_percent: 3, bonus_label: "Картка лояльності" }, { name: "Подорожник", has_bonus: false }],
-  clothing:  [{ name: "Zara", has_bonus: false }, { name: "H&M", has_bonus: false }, { name: "Rozetka", has_bonus: true, bonus_percent: 1, bonus_label: "Rozetka бали" }],
+  clothes:   [{ name: "Zara", has_bonus: false }, { name: "H&M", has_bonus: false }, { name: "Rozetka", has_bonus: true, bonus_percent: 1, bonus_label: "Rozetka бали" }],
 };
 
-const TYPE_LABELS: Record<CategoryType, string> = { fixed: "🔒 Фіксована", variable: "📅 Змінна", bonus: "🎁 Бонусна", income: "💰 Дохід" };
+const TYPE_LABELS: Record<CategoryType, string> = {
+  fixed: "🔒 Фіксована", variable: "📅 Змінна", bonus: "🎁 Бонусна", income: "💰 Дохід",
+};
 
-const DEFAULT_CATEGORIES: {
-  name: string; icon: string; type: CategoryType; txKey: string; merchantKey: string | null;
-  subs: { name: string; icon: string }[];
-}[] = [
-  // Витрати — txKey точно відповідає TX_CATEGORIES.expense[n].id
-  { name: "Продукти",          icon: "🛒", type: "variable", txKey: "food",          merchantKey: "food",
-    subs: [{ name: "Супермаркет", icon: "🏪" }, { name: "Ринок / базар", icon: "🥦" }] },
-  { name: "Кафе та ресторани", icon: "☕", type: "variable", txKey: "cafe",          merchantKey: "cafe",
-    subs: [{ name: "Кава", icon: "☕" }, { name: "Обід / Вечеря", icon: "🍽" }] },
-  { name: "Пальне та авто",    icon: "⛽", type: "variable", txKey: "fuel",          merchantKey: "fuel",
-    subs: [{ name: "Пальне", icon: "⛽" }, { name: "СТО / ремонт", icon: "🔧" }, { name: "Страхівка", icon: "📋" }] },
-  { name: "Транспорт",         icon: "🚌", type: "variable", txKey: "transport",     merchantKey: "transport",
-    subs: [{ name: "Метро / Автобус", icon: "🚇" }, { name: "Таксі", icon: "🚕" }] },
-  { name: "Комунальні",        icon: "💡", type: "fixed",    txKey: "housing",       merchantKey: null,
-    subs: [{ name: "Електрика", icon: "⚡" }, { name: "Вода", icon: "💧" }, { name: "Газ", icon: "🔥" }, { name: "Інтернет", icon: "📡" }] },
-  { name: "Здоров'я",          icon: "💊", type: "variable", txKey: "health",        merchantKey: "health",
-    subs: [{ name: "Ліки", icon: "💊" }, { name: "Лікар", icon: "🩺" }] },
-  { name: "Одяг",              icon: "👗", type: "variable", txKey: "clothes",       merchantKey: "clothing",
-    subs: [] },
-  { name: "Розваги",           icon: "🎮", type: "variable", txKey: "entertainment", merchantKey: null,
-    subs: [{ name: "Кіно / театр", icon: "🎬" }, { name: "Підписки", icon: "📺" }] },
-  { name: "Освіта",            icon: "📚", type: "variable", txKey: "education",     merchantKey: null,
-    subs: [] },
-  { name: "Спорт",             icon: "🏃", type: "variable", txKey: "sport",         merchantKey: null,
-    subs: [] },
-  { name: "Краса",             icon: "💄", type: "variable", txKey: "beauty",        merchantKey: null,
-    subs: [] },
-  { name: "Тварини",           icon: "🐾", type: "variable", txKey: "pets",          merchantKey: null,
-    subs: [] },
-  { name: "Подарунки",         icon: "🎁", type: "variable", txKey: "gifts",         merchantKey: null,
-    subs: [] },
-  { name: "Інші витрати",      icon: "📦", type: "variable", txKey: "other",         merchantKey: null,
-    subs: [] },
-  // Доходи — txKey точно відповідає TX_CATEGORIES.income[n].id
-  { name: "Зарплата",          icon: "💼", type: "income",   txKey: "salary",        merchantKey: null,
-    subs: [] },
-  { name: "Фріланс",           icon: "💻", type: "income",   txKey: "freelance",     merchantKey: null,
-    subs: [] },
-  { name: "Бізнес",            icon: "🏪", type: "income",   txKey: "business",      merchantKey: null,
-    subs: [] },
-  { name: "Інвестиції",        icon: "📈", type: "income",   txKey: "invest",        merchantKey: null,
-    subs: [] },
-  { name: "Повернення",        icon: "↩️", type: "income",   txKey: "refund",        merchantKey: null,
-    subs: [] },
-  { name: "Інший дохід",       icon: "💰", type: "income",   txKey: "other_in",      merchantKey: null,
-    subs: [] },
-];
-
-// Всі можливі txKey в системі = TX_CATEGORIES id
-const ALL_TX_KEYS = new Set([...TX_CATEGORIES.expense, ...TX_CATEGORIES.income].map(c => c.id));
-
-// Маппінг txKey → назву/іконку/тип з TX_CATEGORIES
-const TX_META: Record<string, { label: string; emoji: string; isIncome: boolean }> = {};
-TX_CATEGORIES.expense.forEach(c => { TX_META[c.id] = { label: c.label, emoji: c.emoji, isIncome: false }; });
-TX_CATEGORIES.income.forEach(c => { TX_META[c.id] = { label: c.label, emoji: c.emoji, isIncome: true }; });
+// TX_META для CategoriesTab (відображення пов'язаної tx-категорії)
+const TX_META: Record<string, { label: string; emoji: string }> = {};
+CATEGORY_REGISTRY.forEach(c => { TX_META[c.id] = { label: c.label, emoji: c.emoji }; });
 
 function CategoriesTab({ categories, onReload }: { categories: Category[]; onReload: () => void }) {
   const supabase = createClient();
@@ -489,7 +474,6 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
   const [customMerchant, setCustomMerchant] = useState("");
   const [addCatOpen, setAddCatOpen]       = useState(false);
   const [saving, setSaving]               = useState(false);
-  // newCat: txKey = один з TX_CATEGORIES id (або "" для кастомної)
   const [newCat, setNewCat]               = useState({ name: "", icon: "📦", type: "variable" as CategoryType, txKey: "" });
 
   const inp = "px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm focus:outline-none focus:border-orange-300 transition-all";
@@ -508,23 +492,17 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      // Визначити txKey: явний вибір або автодетект по назві
       let txKey = newCat.txKey;
       if (!txKey) {
         const n = newCat.name.toLowerCase();
-        const match = [...TX_CATEGORIES.expense, ...TX_CATEGORIES.income].find(c => c.label.toLowerCase() === n);
+        const match = CATEGORY_REGISTRY.find(c => c.label.toLowerCase() === n);
         txKey = match?.id ?? "";
       }
-
       const { data: cat, error } = await supabase.from("categories").insert({
         user_id: user.id, name: newCat.name.trim(), icon: newCat.icon,
         type: newCat.type, color: txKey || "custom", sort_order: categories.length,
       }).select().single();
-
       if (error) { console.error("addCategory error:", error); return; }
-
-      // Завантажити preset merchants якщо є відповідний txKey
       if (cat && txKey && MERCHANT_PRESETS[txKey]) {
         await supabase.from("merchants").insert(
           MERCHANT_PRESETS[txKey].map(m => ({
@@ -534,7 +512,6 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
           }))
         );
       }
-
       setNewCat({ name: "", icon: "📦", type: "variable", txKey: "" });
       setAddCatOpen(false);
       onReload();
@@ -579,20 +556,18 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">Категорії, підкатегорії та заклади</p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">Заклади та підкатегорії для кожної категорії</p>
         <button onClick={() => setAddCatOpen(v => !v)}
           className="flex items-center gap-1.5 text-sm text-orange-400 hover:text-orange-500 font-medium transition-colors">
-          <Icon d={icons.plus} className="w-4 h-4" />Категорія
+          <Icon d={icons.plus} className="w-4 h-4" />Додати групу
         </button>
       </div>
 
       {addCatOpen && (
         <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 rounded-2xl p-4 space-y-3">
-          <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">Нова категорія</p>
-
-          {/* Крок 1: вибрати з TX_CATEGORIES (прив'язка до транзакцій) */}
+          <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">Нова група закладів</p>
           <div>
-            <p className="text-xs text-neutral-500 mb-2">Оберіть категорію транзакцій або залиште порожнім для кастомної:</p>
+            <p className="text-xs text-neutral-500 mb-2">Прив'яжіть до категорії реєстру:</p>
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">Витрати</p>
               <div className="flex flex-wrap gap-1.5">
@@ -624,25 +599,14 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
               </div>
             </div>
           </div>
-
-          {/* Крок 2: назва і тип */}
           <div className="flex gap-3 items-start">
             <EmojiPicker value={newCat.icon} onChange={e => setNewCat(p => ({ ...p, icon: e }))} />
             <input value={newCat.name} onChange={e => setNewCat(p => ({ ...p, name: e.target.value }))}
-              placeholder="Назва категорії"
-              className={`flex-1 ${inp} bg-white dark:bg-neutral-800`} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {(["fixed", "variable", "bonus", "income"] as CategoryType[]).map(t => (
-              <button key={t} onClick={() => setNewCat(p => ({ ...p, type: t }))}
-                className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all text-left ${newCat.type === t ? "border-orange-300 bg-orange-100 dark:bg-orange-950/30 text-orange-600" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
-                {TYPE_LABELS[t]}
-              </button>
-            ))}
+              placeholder="Назва групи" className={`flex-1 ${inp} bg-white dark:bg-neutral-800`} />
           </div>
           {newCat.txKey && (
             <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-              ✓ Пов'язана з транзакцією-категорією: <strong>{TX_META[newCat.txKey]?.label}</strong>
+              ✓ Пов'язана з: <strong>{TX_META[newCat.txKey]?.emoji} {TX_META[newCat.txKey]?.label}</strong>
             </p>
           )}
           <div className="flex gap-2">
@@ -673,16 +637,10 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
                 ) : (
                   <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{cat.name}</p>
                 )}
-                <span className={`text-xs font-medium ${cat.type === "fixed" ? "text-blue-400" : cat.type === "bonus" ? "text-pink-400" : "text-neutral-400"}`}>
-                  {TYPE_LABELS[cat.type as CategoryType]}
-                </span>
+                {cat.color && TX_META[cat.color] && (
+                  <span className="text-xs text-neutral-400">{TX_META[cat.color].emoji} {TX_META[cat.color].label}</span>
+                )}
               </div>
-              <select value={cat.type} onChange={e => updateCat(cat.id, { type: e.target.value })}
-                className="px-2 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-600 dark:text-neutral-400 focus:outline-none">
-                {(["fixed", "variable", "bonus", "income"] as CategoryType[]).map(t => (
-                  <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-                ))}
-              </select>
               <button onClick={() => setEditingId(editingId === cat.id ? null : cat.id)}
                 className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-orange-400 flex items-center justify-center transition-colors">
                 <Icon d={icons.edit} className="w-3.5 h-3.5" />
@@ -715,13 +673,9 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
                 <input value={newSubName} onChange={e => setNewSubName(e.target.value)}
                   placeholder="Назва підкатегорії" className={`flex-1 ${inp}`} autoFocus />
                 <button onClick={() => addSubcategory(cat.id)}
-                  className="px-3 py-2 rounded-xl bg-orange-400 text-white text-xs font-bold hover:bg-orange-500">
-                  Додати
-                </button>
+                  className="px-3 py-2 rounded-xl bg-orange-400 text-white text-xs font-bold hover:bg-orange-500">Додати</button>
                 <button onClick={() => setAddSubId(null)}
-                  className="px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-500 text-xs">
-                  ✕
-                </button>
+                  className="px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-500 text-xs">✕</button>
               </div>
             ) : (
               <button onClick={() => setAddSubId(cat.id)}
@@ -780,10 +734,18 @@ export default function BudgetPage() {
   const [year, setYear]         = useState(now.getFullYear());
   const [loading, setLoading]   = useState(true);
   const [seeding, setSeeding]   = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
+
+  // Budget display state — всі ключі = category_key з реєстру
+  const [factMap, setFactMap]         = useState<Record<string, number>>({});
+  const [prevFactMap, setPrevFactMap] = useState<Record<string, number>>({});
+  const [planMap, setPlanMap]         = useState<Record<string, number>>({});
+  const [merchantMap, setMerchantMap] = useState<Record<string, DBMerchant[]>>({});
   const [totalIncome, setTotalIncome] = useState(0);
   const [prevIncome, setPrevIncome]   = useState(0);
   const [obligations, setObligations] = useState<Obligation[]>([]);
+
+  // CategoriesTab state (DB-backed categories для merchant/subcategory CRUD)
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -801,247 +763,190 @@ export default function BudgetPage() {
 
     const [
       { data: cats }, { data: subs }, { data: merch },
-      { data: budgets }, { data: budgetsPrev },
+      { data: budgets },
       { data: txs }, { data: txsPrev },
-      { data: incTxs }, { data: incTxsPrev },
       { data: creditRows },
     ] = await Promise.all([
       supabase.from("categories").select("*").eq("user_id", user.id).order("sort_order"),
       supabase.from("subcategories").select("*").eq("user_id", user.id),
-      supabase.from("merchants").select("*"), // filtered after by category_id
-      supabase.from("budgets").select("*").eq("user_id", user.id).eq("month", month).eq("year", year),
-      supabase.from("budgets").select("*").eq("user_id", user.id).eq("month", prevMonth).eq("year", prevYear),
-      supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
+      supabase.from("merchants").select("*"),
+      supabase.from("budgets").select("category_key, plan_amount")
+        .eq("user_id", user.id).eq("month", month).eq("year", year),
+      supabase.from("transactions").select("amount,category_key,type")
+        .eq("user_id", user.id)
         .gte("transaction_date", dateStart).lt("transaction_date", dateEnd)
-        .eq("type", "expense").is("deleted_at", null),
-      supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
+        .is("deleted_at", null),
+      supabase.from("transactions").select("amount,category_key,type")
+        .eq("user_id", user.id)
         .gte("transaction_date", prevDateStart).lt("transaction_date", prevDateEnd)
-        .eq("type", "expense").is("deleted_at", null),
-      supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
-        .gte("transaction_date", dateStart).lt("transaction_date", dateEnd)
-        .eq("type", "income").is("deleted_at", null),
-      supabase.from("transactions").select("amount,category_key").eq("user_id", user.id)
-        .gte("transaction_date", prevDateStart).lt("transaction_date", prevDateEnd)
-        .eq("type", "income").is("deleted_at", null),
-      supabase.from("credits").select("name,monthly_payment,type").eq("user_id", user.id)
-        .neq("is_archived", true).gt("monthly_payment", 0),
+        .is("deleted_at", null),
+      supabase.from("credits").select("name,monthly_payment,type")
+        .eq("user_id", user.id).neq("is_archived", true).gt("monthly_payment", 0),
     ]);
 
-    // Filter merchants to only those whose category belongs to this user
-    const userCatIds = new Set((cats ?? []).map(c => c.id));
-    const userMerch  = (merch ?? []).filter(m => userCatIds.has(m.category_id));
-
+    // factMap: category_key → sum (тільки expense+income; transfer ігнорується)
     const factMap: Record<string, number>     = {};
     const prevFactMap: Record<string, number> = {};
-    txs?.forEach(t => { const k = t.category_key ?? "other"; factMap[k] = (factMap[k] ?? 0) + Number(t.amount); });
-    txsPrev?.forEach(t => { const k = t.category_key ?? "other"; prevFactMap[k] = (prevFactMap[k] ?? 0) + Number(t.amount); });
+    (txs ?? []).forEach(t => {
+      if (t.type === "transfer") return;
+      const k = t.category_key || "uncategorized";
+      factMap[k] = (factMap[k] ?? 0) + Number(t.amount);
+    });
+    (txsPrev ?? []).forEach(t => {
+      if (t.type === "transfer") return;
+      const k = t.category_key || "uncategorized";
+      prevFactMap[k] = (prevFactMap[k] ?? 0) + Number(t.amount);
+    });
 
-    const budgetMap: Record<string, number>     = {};
-    const budgetPrevMap: Record<string, number> = {};
-    budgets?.forEach(b => { budgetMap[b.category_id] = Number(b.plan_amount); });
-    budgetsPrev?.forEach(b => { budgetPrevMap[b.category_id] = Number(b.plan_amount); });
+    // planMap: category_key → plan_amount (з budgets таблиці)
+    const planMap: Record<string, number> = {};
+    (budgets ?? []).forEach(b => {
+      if (b.category_key) planMap[b.category_key] = Number(b.plan_amount);
+    });
 
-    // Income fact maps (for income categories)
-    // Fallback → "other_in" (відповідає TX_CATEGORIES.income id для "Інший дохід")
-    const incomeFactMap: Record<string, number>     = {};
-    const incomePrevFactMap: Record<string, number> = {};
-    (incTxs     ?? []).forEach(t => { const k = (t.category_key && t.category_key !== "") ? t.category_key : "other_in"; incomeFactMap[k]     = (incomeFactMap[k]     ?? 0) + Number(t.amount); });
-    (incTxsPrev ?? []).forEach(t => { const k = (t.category_key && t.category_key !== "") ? t.category_key : "other_in"; incomePrevFactMap[k] = (incomePrevFactMap[k] ?? 0) + Number(t.amount); });
+    // merchantMap: category_key → merchants[]
+    // DB категорія лінкується до реєстру через поле color (зберігає txKey)
+    const userCatIds = new Set((cats ?? []).map(c => c.id));
+    const userMerch  = (merch ?? []).filter(m => userCatIds.has(m.category_id));
+    const catKeyById: Record<string, string> = {};
+    (cats ?? []).forEach(c => {
+      if (c.color && REGISTRY_KEY_SET.has(c.color)) catKeyById[c.id] = c.color;
+    });
+    const merchantMap: Record<string, DBMerchant[]> = {};
+    userMerch.forEach(m => {
+      const key = catKeyById[m.category_id];
+      if (!key) return;
+      merchantMap[key] = [...(merchantMap[key] ?? []), m];
+    });
 
-    const inc     = Object.values(incomeFactMap).reduce((s, v) => s + v, 0);
-    const incPrev = Object.values(incomePrevFactMap).reduce((s, v) => s + v, 0);
+    // totals
+    const inc     = INCOME_CATEGORIES.reduce((s, c) => s + (factMap[c.id] ?? 0), 0);
+    const incPrev = INCOME_CATEGORIES.reduce((s, c) => s + (prevFactMap[c.id] ?? 0), 0);
+
+    setFactMap(factMap);
+    setPrevFactMap(prevFactMap);
+    setPlanMap(planMap);
+    setMerchantMap(merchantMap);
     setTotalIncome(inc);
     setPrevIncome(incPrev);
-
-    // Credits obligations
     setObligations((creditRows ?? []).map(r => ({
       name: r.name, monthly_payment: Number(r.monthly_payment), type: r.type,
     })));
 
-    // catKeyMap: category id → transaction category_key
-    // Пріоритет: 1) color поле (явний txKey з seed/addCategory)
-    //            2) точний збіг назви з TX_CATEGORIES
-    //            3) keyword fallback
-    const catKeyMap: Record<string, string> = {};
-    cats?.forEach(c => {
-      // Рівень 1: color = txKey (зберігається в resetAndSeed та addCategory)
-      if (c.color && ALL_TX_KEYS.has(c.color)) {
-        catKeyMap[c.id] = c.color;
-        return;
-      }
-      // Рівень 2: точний збіг назви
-      const n = c.name.toLowerCase().trim();
-      const allTc = [...TX_CATEGORIES.expense, ...TX_CATEGORIES.income];
-      const byLabel = allTc.find(tc => tc.label.toLowerCase() === n);
-      if (byLabel) { catKeyMap[c.id] = byLabel.id; return; }
-      // Рівень 3: keyword fallback (для категорій з довільними назвами)
-      if (c.type === "income") {
-        if      (n.includes("зарплат") || n.includes("оклад"))  catKeyMap[c.id] = "salary";
-        else if (n.includes("фріланс") || n.includes("підробіт")) catKeyMap[c.id] = "freelance";
-        else if (n.includes("бізнес"))  catKeyMap[c.id] = "business";
-        else if (n.includes("інвестиц")) catKeyMap[c.id] = "invest";
-        else if (n.includes("поверн"))  catKeyMap[c.id] = "refund";
-        else catKeyMap[c.id] = "other_in";
-        return;
-      }
-      if      (n.includes("продукт") || n.includes("їжа"))  catKeyMap[c.id] = "food";
-      else if (n.includes("кафе") || n.includes("ресторан")) catKeyMap[c.id] = "cafe";
-      else if (n.includes("пальн") || n.includes("бензин") || n.includes("авто")) catKeyMap[c.id] = "fuel";
-      else if (n.includes("транспорт") || n.includes("метро")) catKeyMap[c.id] = "transport";
-      else if (n.includes("здоров") || n.includes("медиц")) catKeyMap[c.id] = "health";
-      else if (n.includes("комунальн") || n.includes("оренд")) catKeyMap[c.id] = "housing";
-      else if (n.includes("одяг") || n.includes("взутт")) catKeyMap[c.id] = "clothes";
-      else if (n.includes("розваг") || n.includes("кіно")) catKeyMap[c.id] = "entertainment";
-      else if (n.includes("освіт") || n.includes("навчан")) catKeyMap[c.id] = "education";
-      else if (n.includes("спорт")) catKeyMap[c.id] = "sport";
-      else if (n.includes("краса")) catKeyMap[c.id] = "beauty";
-      else if (n.includes("тварин")) catKeyMap[c.id] = "pets";
-      else if (n.includes("подарун")) catKeyMap[c.id] = "gifts";
-      else catKeyMap[c.id] = n.replace(/\s+/g, "_");
-    });
+    // CategoriesTab: DB categories з merchants та subcategories
+    setCategories((cats ?? []).map(cat => ({
+      ...cat,
+      subcategories: (subs ?? [])
+        .filter(s => s.category_id === cat.id)
+        .map(s => ({ ...s, sort_order: s.sort_order ?? 0 })),
+      merchants: userMerch.filter(m => m.category_id === cat.id),
+    })));
 
-    setCategories((cats ?? []).map(cat => {
-      const ck = catKeyMap[cat.id] ?? cat.id;
-      const isIncome = cat.type === "income";
-      return {
-        ...cat,
-        plan: budgetMap[cat.id] ?? 0,
-        fact:     isIncome ? (incomeFactMap[ck]     ?? 0) : (factMap[ck]     ?? 0),
-        prevFact: isIncome ? (incomePrevFactMap[ck] ?? 0) : (prevFactMap[ck] ?? 0),
-        subcategories: (subs ?? []).filter(s => s.category_id === cat.id).map(s => ({
-          ...s, sort_order: s.sort_order ?? 0, plan: 0, fact: 0, prevFact: 0,
-        })),
-        merchants: userMerch.filter(m => m.category_id === cat.id),
-      };
-    }));
     setLoading(false);
   }, [monthIdx, year]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function seedDefaultCategories() {
-    setSeeding(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSeeding(false); return; }
-    for (let i = 0; i < DEFAULT_CATEGORIES.length; i++) {
-      const dc = DEFAULT_CATEGORIES[i];
-      const { data: cat } = await supabase.from("categories").insert({
-        user_id: user.id, name: dc.name, icon: dc.icon,
-        type: dc.type, color: dc.txKey, // зберігаємо txKey у полі color для надійного матчингу
-        sort_order: i,
-      }).select().single();
-      if (!cat) continue;
-      if (dc.subs.length > 0) {
-        await supabase.from("subcategories").insert(
-          dc.subs.map((s, j) => ({ user_id: user.id, category_id: cat.id, name: s.name, icon: s.icon, sort_order: j }))
-        );
-      }
-      if (dc.merchantKey && MERCHANT_PRESETS[dc.merchantKey]) {
-        await supabase.from("merchants").insert(
-          MERCHANT_PRESETS[dc.merchantKey].map(m => ({
-            user_id: user.id, category_id: cat.id, name: m.name,
-            has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
-            bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
-          }))
-        );
-      }
-    }
-    setSeeding(false);
-    load();
-  }
-
-  // Скидає всі категорії і перестворює з TX_CATEGORIES
-  async function resetAndSeed() {
-    if (!confirm("Видалити всі поточні категорії бюджету і створити нові з категорій транзакцій?")) return;
-    setSeeding(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSeeding(false); return; }
-
-    // Видалити всі категорії користувача (subcategories/merchants каскадно або вручну)
-    const { data: existingCats } = await supabase.from("categories").select("id").eq("user_id", user.id);
-    if (existingCats?.length) {
-      const ids = existingCats.map(c => c.id);
-      await supabase.from("subcategories").delete().in("category_id", ids);
-      await supabase.from("merchants").delete().in("category_id", ids);
-      await supabase.from("budgets").delete().in("category_id", ids);
-      await supabase.from("categories").delete().eq("user_id", user.id);
-    }
-
-    // Витрати з TX_CATEGORIES
-    let order = 0;
-    for (const tc of TX_CATEGORIES.expense) {
-      const { data: cat } = await supabase.from("categories").insert({
-        user_id: user.id, name: tc.label, icon: tc.emoji,
-        type: "variable", color: tc.id, sort_order: order++,
-      }).select("id").single();
-      if (cat && MERCHANT_PRESETS[tc.id]) {
-        await supabase.from("merchants").insert(
-          MERCHANT_PRESETS[tc.id].map(m => ({
-            category_id: cat.id, name: m.name,
-            has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
-            bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
-          }))
-        );
-      }
-    }
-    // Доходи з TX_CATEGORIES
-    for (const tc of TX_CATEGORIES.income) {
-      await supabase.from("categories").insert({
-        user_id: user.id, name: tc.label, icon: tc.emoji,
-        type: "income", color: tc.id, sort_order: order++,
-      });
-    }
-
-    setSeeding(false);
-    load();
-  }
-
-  // Додає лише дохідні категорії (для користувачів, які вже мали seed без income)
-  async function seedIncomeCategories() {
-    setSeeding(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSeeding(false); return; }
-    const incomeDefs = DEFAULT_CATEGORIES.filter(dc => dc.type === "income");
-    const startOrder = categories.length;
-    for (let i = 0; i < incomeDefs.length; i++) {
-      const dc = incomeDefs[i];
-      await supabase.from("categories").insert({
-        user_id: user.id, name: dc.name, icon: dc.icon,
-        type: dc.type, color: dc.txKey, sort_order: startOrder + i,
-      });
-    }
-    setSeeding(false);
-    load();
-  }
-
-  async function handlePlanChange(catId: string, val: number, month: number, yr: number) {
+  // Зберегти план для категорії за category_key
+  async function handlePlanChange(categoryKey: string, val: number) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    const month = monthIdx + 1;
     const existing = await supabase.from("budgets").select("id")
-      .eq("user_id", user.id).eq("category_id", catId).eq("month", month).eq("year", yr).single();
+      .eq("user_id", user.id).eq("category_key", categoryKey)
+      .eq("month", month).eq("year", year).maybeSingle();
     if (existing.data) {
       await supabase.from("budgets").update({ plan_amount: val }).eq("id", existing.data.id);
     } else {
-      await supabase.from("budgets").insert({ user_id: user.id, category_id: catId, month, year: yr, plan_amount: val });
+      await supabase.from("budgets").insert({
+        user_id: user.id, category_key: categoryKey, month, year, plan_amount: val,
+      });
     }
-    setCategories(p => p.map(c => c.id === catId ? { ...c, plan: val } : c));
+    setPlanMap(p => ({ ...p, [categoryKey]: val }));
   }
 
+  // Копіювати план з попереднього місяця
   async function copyPlan() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const prevMonth = monthIdx === 0 ? 12 : monthIdx;
     const prevYear  = monthIdx === 0 ? year - 1 : year;
-    const { data: prevBudgets } = await supabase.from("budgets").select("*")
+    const { data: prevBudgets } = await supabase.from("budgets")
+      .select("category_key, plan_amount")
       .eq("user_id", user.id).eq("month", prevMonth).eq("year", prevYear);
     if (!prevBudgets?.length) return;
+    const month = monthIdx + 1;
     for (const b of prevBudgets) {
-      const month = monthIdx + 1;
+      if (!b.category_key) continue;
       const ex = await supabase.from("budgets").select("id")
-        .eq("user_id", user.id).eq("category_id", b.category_id).eq("month", month).eq("year", year).single();
-      if (ex.data) await supabase.from("budgets").update({ plan_amount: b.plan_amount }).eq("id", ex.data.id);
-      else await supabase.from("budgets").insert({ user_id: user.id, category_id: b.category_id, month, year, plan_amount: b.plan_amount });
+        .eq("user_id", user.id).eq("category_key", b.category_key)
+        .eq("month", month).eq("year", year).maybeSingle();
+      if (ex.data) {
+        await supabase.from("budgets").update({ plan_amount: b.plan_amount }).eq("id", ex.data.id);
+      } else {
+        await supabase.from("budgets").insert({
+          user_id: user.id, category_key: b.category_key, month, year, plan_amount: b.plan_amount,
+        });
+      }
     }
+    load();
+  }
+
+  // Очистити бюджетні записи без валідного category_key (orphans зі старої системи)
+  async function cleanBudgets() {
+    if (!confirm("Видалити бюджетні записи з невідомими або застарілими категоріями?")) return;
+    setSeeding(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSeeding(false); return; }
+    const { data: allBudgets } = await supabase.from("budgets")
+      .select("id, category_key").eq("user_id", user.id);
+    const orphanIds = (allBudgets ?? [])
+      .filter(b => !b.category_key || !REGISTRY_KEY_SET.has(b.category_key))
+      .map(b => b.id);
+    if (orphanIds.length > 0) {
+      await supabase.from("budgets").delete().in("id", orphanIds);
+    }
+    setSeeding(false);
+    load();
+  }
+
+  // Налаштувати заклади (preset merchants для основних категорій)
+  async function seedMerchants() {
+    setSeeding(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSeeding(false); return; }
+
+    // Для кожного presetKey: знайти або створити DB-категорію, вставити merchants
+    for (const [txKey, presets] of Object.entries(MERCHANT_PRESETS)) {
+      const reg = getCategoryDef(txKey);
+
+      // Знайти існуючу DB-категорію
+      let catId: string | null = categories.find(c => c.color === txKey)?.id ?? null;
+
+      if (!catId) {
+        const { data: newCat } = await supabase.from("categories").insert({
+          user_id: user.id, name: reg.label, icon: reg.emoji,
+          type: reg.type === "income" ? "income" : "variable",
+          color: txKey, sort_order: 99,
+        }).select("id").single();
+        catId = newCat?.id ?? null;
+      }
+      if (!catId) continue;
+
+      // Вставити merchants яких ще нема
+      const existing = categories.find(c => c.id === catId)?.merchants.map(m => m.name) ?? [];
+      const toInsert = presets.filter(p => !existing.includes(p.name));
+      if (toInsert.length > 0) {
+        await supabase.from("merchants").insert(
+          toInsert.map(m => ({
+            category_id: catId, name: m.name,
+            has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
+            bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
+          }))
+        );
+      }
+    }
+    setSeeding(false);
     load();
   }
 
@@ -1072,16 +977,16 @@ export default function BudgetPage() {
             <Icon d={extraIcons.copy} className="w-3.5 h-3.5" />Копіювати план
           </button>
           <div className="w-px h-5 bg-neutral-100 dark:bg-neutral-800 mx-1" />
-          <button onClick={resetAndSeed} disabled={seeding}
+          <button onClick={cleanBudgets} disabled={seeding}
             className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-red-400 transition-colors disabled:opacity-50">
             {seeding ? <Icon d={icons.loader} className="w-3.5 h-3.5 animate-spin" /> : "↺"}
-            Скинути категорії
+            Очистити
           </button>
         </Card>
       </div>
 
       <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800/50 p-1 rounded-2xl w-fit">
-        {[{ id: "budget" as Tab, label: "📊 Бюджет" }, { id: "categories" as Tab, label: "🗂 Категорії" }].map(({ id, label }) => (
+        {[{ id: "budget" as Tab, label: "📊 Бюджет" }, { id: "categories" as Tab, label: "🏪 Заклади" }].map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-5 py-2 rounded-xl text-sm font-medium transition-all ${tab === id ? "bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 shadow-sm" : "text-neutral-500 dark:text-neutral-400"}`}>
             {label}
@@ -1093,46 +998,37 @@ export default function BudgetPage() {
         <div className="flex items-center justify-center py-16">
           <Icon d={icons.loader} className="w-8 h-8 text-orange-400 animate-spin" />
         </div>
-      ) : categories.length === 0 && tab === "budget" ? (
-        <Card className="p-10 text-center">
-          <p className="text-4xl mb-4">📊</p>
-          <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-2">Бюджет ще не налаштований</h2>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-6 max-w-sm mx-auto">
-            Додайте популярні категорії одним кліком або перейдіть в «Категорії» і створіть власні.
-          </p>
-          <div className="flex gap-3 justify-center flex-wrap">
-            <button onClick={seedDefaultCategories} disabled={seeding}
-              className="px-6 py-2.5 rounded-xl bg-orange-400 text-white font-semibold text-sm hover:bg-orange-500 disabled:opacity-60 transition-all flex items-center gap-2">
-              {seeding && <Icon d={icons.loader} className="w-4 h-4 animate-spin" />}
-              🚀 Ініціалізувати категорії
-            </button>
-            <button onClick={() => setTab("categories")}
-              className="px-6 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 font-medium text-sm hover:border-orange-300 transition-all">
-              Додати вручну
-            </button>
-          </div>
-        </Card>
       ) : (
         <>
-          {/* Banner: є дохід але нема дохідних категорій */}
-          {tab === "budget" && totalIncome > 0 && !categories.some(c => c.type === "income") && (
-            <Card className="px-5 py-4 flex items-center gap-4 border-l-4 border-green-400">
-              <span className="text-2xl">💰</span>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                  Є дохідні транзакції на {totalIncome.toLocaleString("uk-UA")} грн, але категорій доходу немає
-                </p>
-                <p className="text-xs text-neutral-500 mt-0.5">Додайте дохідні категорії щоб побачити розбивку</p>
-              </div>
-              <button onClick={seedIncomeCategories} disabled={seeding}
-                className="shrink-0 px-4 py-2 rounded-xl bg-green-500 text-white text-sm font-semibold hover:bg-green-600 disabled:opacity-60 transition-all flex items-center gap-1.5">
-                {seeding && <Icon d={icons.loader} className="w-3.5 h-3.5 animate-spin" />}
-                Додати категорії доходу
-              </button>
-            </Card>
+          {tab === "budget" && (
+            <BudgetTab
+              factMap={factMap} prevFactMap={prevFactMap}
+              planMap={planMap} merchantMap={merchantMap}
+              onPlanChange={handlePlanChange}
+              monthIdx={monthIdx} year={year}
+              totalIncome={totalIncome} prevIncome={prevIncome}
+              obligations={obligations}
+            />
           )}
-          {tab === "budget"     && <BudgetTab categories={categories} onPlanChange={handlePlanChange} monthIdx={monthIdx} year={year} totalIncome={totalIncome} prevIncome={prevIncome} obligations={obligations} />}
-          {tab === "categories" && <CategoriesTab categories={categories} onReload={load} />}
+          {tab === "categories" && (
+            <>
+              {categories.length === 0 && (
+                <Card className="p-6 flex items-center gap-4">
+                  <span className="text-2xl">🏪</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Заклади ще не налаштовані</p>
+                    <p className="text-xs text-neutral-400 mt-0.5">Завантажте популярні заклади автоматично</p>
+                  </div>
+                  <button onClick={seedMerchants} disabled={seeding}
+                    className="shrink-0 px-4 py-2 rounded-xl bg-orange-400 text-white text-sm font-semibold hover:bg-orange-500 disabled:opacity-60 transition-all flex items-center gap-1.5">
+                    {seeding && <Icon d={icons.loader} className="w-3.5 h-3.5 animate-spin" />}
+                    Завантажити заклади
+                  </button>
+                </Card>
+              )}
+              <CategoriesTab categories={categories} onReload={load} />
+            </>
+          )}
         </>
       )}
     </div>

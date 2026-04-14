@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Button, Toggle } from "@/components/ui";
 import { fmt, dateLabel } from "@/lib/format";
-import { TX_CATEGORIES, getTxCategory } from "@/lib/categories";
+import { TX_CATEGORIES, getTxCategory } from "@/lib/category-registry";
 
 // ─── Types ────────────────────────────────────────────────────
 
