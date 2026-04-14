@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Card, StatCard, ProgressBar } from "@/components/ui";
+import { getCategoryDef } from "@/lib/category-registry";
 
 type Period = "month" | "quarter" | "year";
 
@@ -37,20 +38,10 @@ function startOf(period: Period): string {
   return new Date(d.getFullYear(), 0, 1).toISOString().slice(0, 10);
 }
 
-const CAT_ICONS: Record<string, string> = {
-  food: "🛒", cafe: "☕", transport: "🚗", fuel: "⛽", health: "💊",
-  housing: "🏠", clothes: "👗", entertainment: "🎮", education: "📚",
-  sport: "🏃", beauty: "💄", pets: "🐾", gifts: "🎁", other: "📦",
-  salary: "💼", freelance: "💻", business: "🏪", invest: "📈",
-  gift: "🎀", refund: "↩️", other_in: "💰",
-};
-const CAT_NAMES: Record<string, string> = {
-  food: "Продукти", cafe: "Кафе", transport: "Транспорт", fuel: "Пальне",
-  health: "Здоров'я", housing: "Комунальні", clothes: "Одяг", entertainment: "Розваги",
-  education: "Освіта", sport: "Спорт", beauty: "Краса", pets: "Тварини",
-  gifts: "Подарунки", other: "Інше", salary: "Зарплата", freelance: "Фріланс",
-  business: "Бізнес", invest: "Інвестиції", gift: "Подарунок", refund: "Повернення", other_in: "Інше",
-};
+// Делегуємо до єдиного реєстру замість локальних копій
+const catDef = (key: string) => getCategoryDef(key);
+const CAT_ICONS = new Proxy({} as Record<string, string>, { get: (_, k: string) => catDef(k).emoji });
+const CAT_NAMES = new Proxy({} as Record<string, string>, { get: (_, k: string) => catDef(k).label });
 const ACC_ICONS: Record<string, string> = {
   cash: "👛", banking: "💳", deposit: "🏦", credit: "💳",
   installment: "🛍", mortgage: "🏠", property: "🏘", crypto: "₿", collections: "🎯",
