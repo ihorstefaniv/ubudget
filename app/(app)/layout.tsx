@@ -13,6 +13,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/lib/auth";
 import TransactionModal from "@/components/TransactionModal";
+import BugReportModal from "@/components/BugReportModal";
 import { Icon, icons } from "@/components/ui";
 import { FeaturesProvider } from "@/lib/features-context";
 
@@ -92,12 +93,13 @@ interface SidebarContentProps {
   modules: Record<string, boolean>;
   /** Колбек закриття — є тільки в мобільному варіанті */
   onClose?: () => void;
+  onBugReport: () => void;
 }
 
 /**
  * Вміст сайдбару — використовується і в десктопному і в мобільному варіанті.
  */
-function SidebarContent({ pathname, userName, modules, onClose }: SidebarContentProps) {
+function SidebarContent({ pathname, userName, modules, onClose, onBugReport }: SidebarContentProps) {
   const mainNav = allNavItems.filter(item =>
     item.moduleKey === null || (modules[item.moduleKey] ?? true)
   );
@@ -260,7 +262,7 @@ function SidebarContent({ pathname, userName, modules, onClose }: SidebarContent
 
         {/* Кнопка "Знайшли помилку" */}
         <button
-          onClick={() => alert("Функція скоро буде доступна!")}
+          onClick={() => { onClose?.(); onBugReport(); }}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-neutral-400 dark:text-neutral-500 hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20 transition-all text-left"
           title="Повідомити про помилку"
         >
@@ -311,10 +313,11 @@ function SidebarContent({ pathname, userName, modules, onClose }: SidebarContent
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname    = usePathname();
   const router      = useRouter();
-  const [mobileOpen, setMobileOpen]   = useState(false);
-  const [userName, setUserName]       = useState("Користувач");
-  const [showTxModal, setShowTxModal] = useState(false);
-  const [modules, setModules]         = useState<Record<string, boolean>>({
+  const [mobileOpen, setMobileOpen]     = useState(false);
+  const [userName, setUserName]         = useState("Користувач");
+  const [showTxModal, setShowTxModal]   = useState(false);
+  const [showBugModal, setShowBugModal] = useState(false);
+  const [modules, setModules]           = useState<Record<string, boolean>>({
     budget: true, credits: true, investments: true, envelopes: true, household: true,
   });
 
@@ -350,7 +353,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* ── Десктопний сайдбар (фіксований, 240px) ── */}
       <aside className="hidden lg:flex flex-col w-60 shrink-0 fixed inset-y-0 left-0 bg-white dark:bg-neutral-900 border-r border-neutral-100 dark:border-neutral-800 z-30">
-        <SidebarContent pathname={pathname} userName={userName} modules={modules} />
+        <SidebarContent pathname={pathname} userName={userName} modules={modules} onBugReport={() => setShowBugModal(true)} />
       </aside>
 
       {/* ── Мобільний overlay (затемнення) ── */}
@@ -372,6 +375,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           userName={userName}
           modules={modules}
           onClose={() => setMobileOpen(false)}
+          onBugReport={() => setShowBugModal(true)}
         />
       </aside>
 
@@ -426,6 +430,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             console.log("New transaction:", tx);
             setShowTxModal(false);
           }}
+        />
+      )}
+
+      {/* Модалка звіту про помилку */}
+      {showBugModal && (
+        <BugReportModal
+          sourceUrl={pathname}
+          onClose={() => setShowBugModal(false)}
         />
       )}
     </div>
