@@ -12,7 +12,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/lib/auth";
-import TransactionModal from "@/components/TransactionModal";
+import AddTransactionModal from "@/components/AddTransactionModal";
 import BugReportModal from "@/components/BugReportModal";
 import { Icon, icons } from "@/components/ui";
 import { FeaturesProvider } from "@/lib/features-context";
@@ -424,12 +424,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Модалка додавання транзакції */}
       {showTxModal && (
-        <TransactionModal
+        <AddTransactionModal
           onClose={() => setShowTxModal(false)}
-          onAdd={(tx) => {
-            console.log("New transaction:", tx);
-            setShowTxModal(false);
-          }}
+          onSaved={() => setShowTxModal(false)}
         />
       )}
 
