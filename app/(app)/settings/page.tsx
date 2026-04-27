@@ -56,7 +56,7 @@ function ProfileTab() {
     const { error } = await supabase.from("profiles")
       .update({ full_name: name.trim(), phone: phone.trim(), birthday: birthday || null })
       .eq("id", data.user.id);
-    setSaveMsg(error ? "Помилка збереження" : "Збережено");
+    setSaveMsg(error ? `Помилка: ${error.message}` : "Збережено");
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 3000);
   }
@@ -169,7 +169,7 @@ function AppearanceTab() {
     if (!data.user) { setSaving(false); return; }
     const { error } = await supabase.from("profiles")
       .update({ currency, modules, envelope_mode: envelopeMode }).eq("id", data.user.id);
-    setSaveMsg(error ? "Помилка" : "Збережено");
+    setSaveMsg(error ? `Помилка: ${error.message}` : "Збережено");
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 3000);
   }
@@ -276,7 +276,7 @@ function NotificationsTab() {
     if (!data.user) { setSaving(false); return; }
     const { error } = await supabase.from("profiles")
       .update({ notifications: notif }).eq("id", data.user.id);
-    setSaveMsg(error ? "Помилка" : "Збережено");
+    setSaveMsg(error ? `Помилка: ${error.message}` : "Збережено");
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 3000);
   }
