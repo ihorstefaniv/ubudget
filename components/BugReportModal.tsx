@@ -71,13 +71,9 @@ export default function BugReportModal({ sourceUrl, onClose }: Props) {
         }
       }
 
-      // Генеруємо номер тікету
-      const ticketNum = "BUG-" + Date.now().toString(36).toUpperCase();
-
       // Базові поля — завжди є в таблиці
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const payload: Record<string, any> = {
-        number:  ticketNum,
         email:   user.email ?? "",
         subject: `Помилка на сторінці: ${sourceUrl}`,
         message: description.trim(),
