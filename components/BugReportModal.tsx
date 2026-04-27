@@ -74,19 +74,27 @@ export default function BugReportModal({ sourceUrl, onClose }: Props) {
       // Генеруємо номер тікету
       const ticketNum = "BUG-" + Date.now().toString(36).toUpperCase();
 
-      const { error: insertErr } = await supabase.from("tickets").insert({
-        number:         ticketNum,
-        email:          user.email ?? "",
-        subject:        `Помилка на сторінці: ${sourceUrl}`,
-        message:        description.trim(),
-        status:         "new",
-        source_url:     sourceUrl,
-        screenshot_url: screenshotUrl,
-        assignee_id:    adminProfile?.id ?? null,
-        user_id:        user.id,
-      });
+      // Базові поля — завжди є в таблиці
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payload: Record<string, any> = {
+        number:  ticketNum,
+        email:   user.email ?? "",
+        subject: `Помилка на сторінці: ${sourceUrl}`,
+        message: description.trim(),
+        status:  "new",
+        user_id: user.id,
+      };
+      // Додаємо нові поля лише якщо є значення (на випадок якщо міграція ще не запущена)
+      if (sourceUrl)           payload.source_url     = sourceUrl;
+      if (screenshotUrl)       payload.screenshot_url = screenshotUrl;
+      if (adminProfile?.id)    payload.assignee_id    = adminProfile.id;
 
-      if (insertErr) throw insertErr;
+      const { error: insertErr } = await supabase.from("tickets").insert(payload);
+
+      if (insertErr) {
+        const msg = (insertErr as { message?: string }).message ?? JSON.stringify(insertErr);
+        throw new Error(msg);
+      }
       setDone(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Помилка надсилання");
