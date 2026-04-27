@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import FeatureGate from "@/components/FeatureGate";
 
 type Tab = "portfolio" | "stocks" | "bonds" | "realestate" | "business" | "collections";
 
@@ -904,35 +905,37 @@ export default function InvestmentsPage() {
   ];
 
   return (
-    <div className="space-y-6 pb-8">
-      <div>
-        <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Інвестиції</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">Портфель, бізнес та альтернативні активи</p>
-      </div>
-
-      <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800/50 p-1 rounded-2xl overflow-x-auto">
-        {tabs.map(({ id, label }) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${tab === id ? "bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 shadow-sm" : "text-neutral-500 dark:text-neutral-400"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <Icon d={icons.loader} className="w-8 h-8 text-orange-400 animate-spin" />
+    <FeatureGate featureKey="feature_investments" label="Інвестиції">
+      <div className="space-y-6 pb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Інвестиції</h1>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">Портфель, бізнес та альтернативні активи</p>
         </div>
-      ) : (
-        <>
-          {tab === "portfolio"   && <PortfolioTab stocks={stocks} bonds={bonds} realestate={realestate} businesses={businesses} collections={collections} />}
-          {tab === "stocks"      && <StocksTab stocks={stocks} onReload={load} />}
-          {tab === "bonds"       && <BondsTab bonds={bonds} onReload={load} />}
-          {tab === "realestate"  && <RealEstateTab realestate={realestate} onReload={load} />}
-          {tab === "business"    && <BusinessTab businesses={businesses} onReload={load} />}
-          {tab === "collections" && <CollectionsTab collections={collections} onReload={load} />}
-        </>
-      )}
-    </div>
+
+        <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800/50 p-1 rounded-2xl overflow-x-auto">
+          {tabs.map(({ id, label }) => (
+            <button key={id} onClick={() => setTab(id)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${tab === id ? "bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 shadow-sm" : "text-neutral-500 dark:text-neutral-400"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Icon d={icons.loader} className="w-8 h-8 text-orange-400 animate-spin" />
+          </div>
+        ) : (
+          <>
+            {tab === "portfolio"   && <PortfolioTab stocks={stocks} bonds={bonds} realestate={realestate} businesses={businesses} collections={collections} />}
+            {tab === "stocks"      && <StocksTab stocks={stocks} onReload={load} />}
+            {tab === "bonds"       && <BondsTab bonds={bonds} onReload={load} />}
+            {tab === "realestate"  && <RealEstateTab realestate={realestate} onReload={load} />}
+            {tab === "business"    && <BusinessTab businesses={businesses} onReload={load} />}
+            {tab === "collections" && <CollectionsTab collections={collections} onReload={load} />}
+          </>
+        )}
+      </div>
+    </FeatureGate>
   );
 }

@@ -52,6 +52,7 @@ const extraIcons = {
   chevLeft:  "M15 19l-7-7 7-7",
   copy:      "M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z",
   drag:      "M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01",
+  lock:      "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z",
 };
 const EMOJIS = ["🛒","☕","⛽","🚗","💊","💡","👔","🏠","🎮","✈️","📚","💪","🐾","🎁","💈","🎨","🍔","🍕","🛍","🏋️","🎭","🎵","🌿","🔧","🏦","📱","💻","🎓","🏥","🍷","🧴","🎯","🚿","🛁","🪴"];
 
@@ -112,6 +113,7 @@ type BudgetRowData = CategoryDef & {
 
 function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
   monthIdx, year, totalIncome, prevIncome, obligations,
+  envelopeMode, envelopePlanMap,
 }: {
   factMap: Record<string, number>;
   prevFactMap: Record<string, number>;
@@ -121,6 +123,8 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
   monthIdx: number; year: number;
   totalIncome: number; prevIncome: number;
   obligations: Obligation[];
+  envelopeMode: boolean;
+  envelopePlanMap: Record<string, number>;
 }) {
   const [showAllExpense, setShowAllExpense] = useState(false);
   const [expandedMerchants, setExpandedMerchants] = useState<Set<string>>(new Set());
@@ -174,8 +178,14 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
   const cols = "grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_0.8fr_0.8fr]";
 
   const renderRow = (r: BudgetRowData, isIncome = false) => {
-    const pct       = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
-    const remaining = isIncome ? r.fact - r.plan : r.plan - r.fact;
+    // Якщо envelope_mode — план береться з конвертів для обов'язкових категорій
+    const effectivePlan = envelopeMode && envelopePlanMap[r.id] != null
+      ? envelopePlanMap[r.id]
+      : r.plan;
+    const isEnvLocked = envelopeMode && envelopePlanMap[r.id] != null;
+
+    const pct       = effectivePlan > 0 ? Math.round(r.fact / effectivePlan * 100) : 0;
+    const remaining = isIncome ? r.fact - effectivePlan : effectivePlan - r.fact;
     const d         = delta(r.fact, r.prevFact);
     // Топ заклад — тільки якщо є реальні транзакції
     const topM      = r.fact > 0
@@ -196,7 +206,7 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
             <span className="text-base shrink-0">{r.emoji}</span>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">{r.label}</p>
-              {!isIncome && r.plan > 0 && (
+              {!isIncome && effectivePlan > 0 && (
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <div className="h-1.5 w-16 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
                     <div className={`h-full rounded-full ${pctBg(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
@@ -215,12 +225,22 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
           </div>
 
           <div onClick={e => e.stopPropagation()}>
-            <PlanCell value={r.plan} onChange={v => onPlanChange(r.id, v)} />
+            {isEnvLocked ? (
+              <span className="flex items-center gap-1 text-sm font-medium text-neutral-500 tabular-nums"
+                title="Визначено конвертом">
+                {fmt(effectivePlan)}
+                <svg className="w-3 h-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={extraIcons.lock} />
+                </svg>
+              </span>
+            ) : (
+              <PlanCell value={r.plan} onChange={v => onPlanChange(r.id, v)} />
+            )}
           </div>
 
           <div className="flex items-center">
             <span className={`text-sm font-semibold tabular-nums ${
-              isIncome ? "text-green-500" : (r.fact > r.plan && r.plan > 0 ? "text-red-500" : "text-neutral-900 dark:text-neutral-100")
+              isIncome ? "text-green-500" : (r.fact > effectivePlan && effectivePlan > 0 ? "text-red-500" : "text-neutral-900 dark:text-neutral-100")
             }`}>
               {isIncome && r.fact > 0 ? "+" : ""}{fmt(r.fact)}
             </span>
@@ -266,6 +286,19 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
 
   return (
     <div className="space-y-4">
+      {/* Envelope mode banner */}
+      {envelopeMode && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30">
+          <span className="text-lg">✉️</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-orange-700 dark:text-orange-400">Метод конвертів активний</p>
+            <p className="text-xs text-orange-600/70 dark:text-orange-500/70 mt-0.5">
+              Категорії з обов'язкових конвертів мають locked план <svg className="w-3 h-3 inline opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={extraIcons.lock} /></svg>. Тижневий конверт — агрегований ліміт без розбивки.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4">
@@ -742,6 +775,10 @@ export default function BudgetPage() {
   const [prevIncome, setPrevIncome]   = useState(0);
   const [obligations, setObligations] = useState<Obligation[]>([]);
 
+  // Envelope mode
+  const [envelopeMode, setEnvelopeMode]         = useState(false);
+  const [envelopePlanMap, setEnvelopePlanMap]   = useState<Record<string, number>>({});
+
   // CategoriesTab state (DB-backed categories для merchant/subcategory CRUD)
   const [categories, setCategories] = useState<Category[]>([]);
 
@@ -764,6 +801,8 @@ export default function BudgetPage() {
       { data: budgets },
       { data: txs }, { data: txsPrev },
       { data: creditRows },
+      { data: profile },
+      { data: envSettings },
     ] = await Promise.all([
       supabase.from("categories").select("*").eq("user_id", user.id).order("sort_order"),
       supabase.from("subcategories").select("*").eq("user_id", user.id),
@@ -780,6 +819,9 @@ export default function BudgetPage() {
         .is("deleted_at", null),
       supabase.from("credits").select("name,monthly_payment,type")
         .eq("user_id", user.id).neq("is_archived", true).gt("monthly_payment", 0),
+      supabase.from("profiles").select("envelope_mode").eq("id", user.id).single(),
+      supabase.from("envelope_settings").select("mandatory")
+        .eq("user_id", user.id).eq("month", month).eq("year", year).single(),
     ]);
 
     // factMap: category_key → sum (тільки expense+income; transfer ігнорується)
@@ -821,12 +863,25 @@ export default function BudgetPage() {
     const inc     = INCOME_CATEGORIES.reduce((s, c) => s + (factMap[c.id] ?? 0), 0);
     const incPrev = INCOME_CATEGORIES.reduce((s, c) => s + (prevFactMap[c.id] ?? 0), 0);
 
+    // Envelope mode plan override
+    const isEnvMode = profile?.envelope_mode ?? false;
+    const envPlanMap: Record<string, number> = {};
+    if (isEnvMode && envSettings?.mandatory) {
+      (envSettings.mandatory as { category_key?: string; amount?: number; monthly_payment?: number }[]).forEach(item => {
+        if (item.category_key) {
+          envPlanMap[item.category_key] = (envPlanMap[item.category_key] ?? 0) + Number(item.amount ?? item.monthly_payment ?? 0);
+        }
+      });
+    }
+
     setFactMap(factMap);
     setPrevFactMap(prevFactMap);
     setPlanMap(planMap);
     setMerchantMap(merchantMap);
     setTotalIncome(inc);
     setPrevIncome(incPrev);
+    setEnvelopeMode(isEnvMode);
+    setEnvelopePlanMap(envPlanMap);
     setObligations((creditRows ?? []).map(r => ({
       name: r.name, monthly_payment: Number(r.monthly_payment), type: r.type,
     })));
@@ -1006,6 +1061,8 @@ export default function BudgetPage() {
               monthIdx={monthIdx} year={year}
               totalIncome={totalIncome} prevIncome={prevIncome}
               obligations={obligations}
+              envelopeMode={envelopeMode}
+              envelopePlanMap={envelopePlanMap}
             />
           )}
           {tab === "categories" && (

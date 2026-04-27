@@ -63,32 +63,34 @@ function Row({ label, desc, children }: { label: string; desc?: string; children
 const inp = "w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-orange-400 transition-colors bg-white";
 
 interface Settings {
-  maintenance_mode:   boolean;
-  maintenance_msg:    string;
-  tg_bot_token:       string;
-  tg_chat_id:         string;
-  tg_notify_tickets:  boolean;
-  tg_notify_users:    boolean;
-  feature_blog:       boolean;
-  feature_household:  boolean;
-  feature_investments:boolean;
-  feature_collections:boolean;
-  feature_tools:      boolean;
-  site_name:          string;
-  support_email:      string;
+  maintenance_mode:    boolean;
+  maintenance_msg:     string;
+  tg_bot_token:        string;
+  tg_chat_id:          string;
+  tg_notify_tickets:   boolean;
+  tg_notify_users:     boolean;
+  feature_blog:        boolean;
+  feature_household:   boolean;
+  feature_investments: boolean;
+  feature_envelopes:   boolean;
+  feature_collections: boolean;
+  feature_tools:       boolean;
+  site_name:           string;
+  support_email:       string;
 }
 
 const DEFAULTS: Settings = {
   maintenance_mode: false, maintenance_msg: "Сайт тимчасово на технічному обслуговуванні. Повернемось скоро!",
   tg_bot_token: "", tg_chat_id: "", tg_notify_tickets: true, tg_notify_users: false,
   feature_blog: true, feature_household: false, feature_investments: true,
-  feature_collections: false, feature_tools: true,
+  feature_envelopes: false, feature_collections: false, feature_tools: true,
   site_name: "UBudget", support_email: "",
 };
 
 const FEATURES = [
   { key: "feature_blog",         label: "Блог",                desc: "Публічний блог на /blog"                      },
   { key: "feature_investments",  label: "Інвестиції",          desc: "Модуль /investments для всіх користувачів"     },
+  { key: "feature_envelopes",    label: "Конверти",            desc: "Метод конвертів /envelopes (в розробці)"       },
   { key: "feature_household",    label: "Сімейний бюджет",     desc: "Модуль /household (в розробці)"                },
   { key: "feature_collections",  label: "Колекції",            desc: "Модуль колекціонування (в розробці)"           },
   { key: "feature_tools",        label: "Інструменти",         desc: "Калькулятори та інші утиліти (/tools)"         },

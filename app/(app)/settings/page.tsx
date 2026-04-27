@@ -1,26 +1,12 @@
-/**
- * @file app/(app)/settings/page.tsx
- * @description Сторінка налаштувань з 5 табами:
- * Профіль, Вигляд, Сім'я, Сповіщення, Безпека & Дані.
- *
- * Рефакторинг: замінено локальні Toggle/Input/Select/Icon
- * на компоненти з @/components/ui
- */
-
 "use client";
 
 import { useState, useEffect } from "react";
 import { Icon, icons, Input, Select, Toggle, ToggleRow, Card, Button, Badge } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 
-type Tab = "profile" | "appearance" | "family" | "notifications" | "security";
+type Tab = "profile" | "appearance" | "notifications" | "security";
 
 // ─── Section ──────────────────────────────────────────────────
-
-/**
- * Секція з заголовком і опціональним описом.
- * Обгортає Card з відступами.
- */
 function Section({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
   return (
     <Card className="space-y-5">
@@ -34,7 +20,6 @@ function Section({ title, desc, children }: { title: string; desc?: string; chil
 }
 
 // ─── 1. Профіль ───────────────────────────────────────────────
-
 function ProfileTab() {
   const supabase = createClient();
 
@@ -45,8 +30,6 @@ function ProfileTab() {
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving]           = useState(false);
   const [saveMsg, setSaveMsg]         = useState("");
-
-  const [oldPwd, setOldPwd]           = useState("");
   const [newPwd, setNewPwd]           = useState("");
   const [confirmPwd, setConfirmPwd]   = useState("");
   const [pwdMsg, setPwdMsg]           = useState("");
@@ -57,10 +40,7 @@ function ProfileTab() {
       if (!data.user) return;
       setEmail(data.user.email ?? "");
       const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name, phone, birthday")
-        .eq("id", data.user.id)
-        .single();
+        .from("profiles").select("full_name, phone, birthday").eq("id", data.user.id).single();
       if (profile) {
         setName(profile.full_name ?? "");
         setPhone(profile.phone ?? "");
@@ -70,12 +50,10 @@ function ProfileTab() {
   }, []);
 
   async function handleSaveProfile() {
-    setSaving(true);
-    setSaveMsg("");
+    setSaving(true); setSaveMsg("");
     const { data } = await supabase.auth.getUser();
     if (!data.user) { setSaving(false); return; }
-    const { error } = await supabase
-      .from("profiles")
+    const { error } = await supabase.from("profiles")
       .update({ full_name: name.trim(), phone: phone.trim(), birthday: birthday || null })
       .eq("id", data.user.id);
     setSaveMsg(error ? "Помилка збереження" : "Збережено");
@@ -84,37 +62,28 @@ function ProfileTab() {
   }
 
   async function handleChangePassword() {
-    if (!newPwd || newPwd !== confirmPwd) {
-      setPwdMsg("Паролі не збігаються"); return;
-    }
-    if (newPwd.length < 8) {
-      setPwdMsg("Мінімум 8 символів"); return;
-    }
-    setPwdSaving(true);
-    setPwdMsg("");
+    if (!newPwd || newPwd !== confirmPwd) { setPwdMsg("Паролі не збігаються"); return; }
+    if (newPwd.length < 8) { setPwdMsg("Мінімум 8 символів"); return; }
+    setPwdSaving(true); setPwdMsg("");
     const { error } = await supabase.auth.updateUser({ password: newPwd });
     setPwdMsg(error ? "Помилка: " + error.message : "Пароль змінено");
     setPwdSaving(false);
-    if (!error) { setOldPwd(""); setNewPwd(""); setConfirmPwd(""); }
+    if (!error) { setNewPwd(""); setConfirmPwd(""); }
     setTimeout(() => setPwdMsg(""), 4000);
   }
 
   return (
     <div className="space-y-4">
       <Section title="Особисті дані">
-        {/* Аватар */}
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-orange-100 dark:bg-orange-950 flex items-center justify-center text-orange-500 text-2xl font-bold shrink-0">
             {name?.[0]?.toUpperCase() ?? "?"}
           </div>
           <div>
-            <button className="text-sm font-medium text-orange-400 hover:text-orange-500 transition-colors">
-              Завантажити фото
-            </button>
-            <p className="text-xs text-neutral-400 mt-0.5">JPG, PNG до 5 МБ</p>
+            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{name || "Ім'я не задано"}</p>
+            <p className="text-xs text-neutral-400 mt-0.5">{email}</p>
           </div>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Повне ім'я" value={name} onChange={e => setName(e.target.value)} placeholder="Ім'я Прізвище" />
           <Input label="Дата народження" type="date" value={birthday} onChange={e => setBirthday(e.target.value)} />
@@ -123,15 +92,13 @@ function ProfileTab() {
           <Input label="Email" type="email" value={email} readOnly hint="Email не можна змінити" />
           <Input label="Телефон" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+380..." />
         </div>
-
         <div className="flex items-center gap-3">
           <Button onClick={handleSaveProfile} disabled={saving}>{saving ? "Збереження..." : "Зберегти зміни"}</Button>
-          {saveMsg && <span className="text-sm text-green-500">{saveMsg}</span>}
+          {saveMsg && <span className={`text-sm ${saveMsg === "Збережено" ? "text-green-500" : "text-red-500"}`}>{saveMsg}</span>}
         </div>
       </Section>
 
       <Section title="Зміна пароля">
-        <Input label="Поточний пароль" type={showPassword ? "text" : "password"} value={oldPwd} onChange={e => setOldPwd(e.target.value)} placeholder="••••••••" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Новий пароль" type={showPassword ? "text" : "password"} value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="Мінімум 8 символів" />
           <Input label="Підтвердити пароль" type={showPassword ? "text" : "password"} value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder="Повторіть пароль" />
@@ -149,15 +116,38 @@ function ProfileTab() {
 }
 
 // ─── 2. Вигляд ────────────────────────────────────────────────
+type Modules = { budget: boolean; household: boolean; envelopes: boolean; investments: boolean; credits: boolean };
 
 function AppearanceTab() {
-  const [theme, setTheme]   = useState<"light" | "dark" | "system">("system");
-  const [currency, setCurrency] = useState("UAH");
-  const [modules, setModules] = useState({
-    budget: true, household: false, collections: false, crypto: false, envelopes: false,
+  const supabase = createClient();
+  const [theme, setTheme]               = useState<"light" | "dark" | "system">("system");
+  const [currency, setCurrency]         = useState("UAH");
+  const [envelopeMode, setEnvelopeMode] = useState(false);
+  const [modules, setModules]           = useState<Modules>({
+    budget: true, household: true, envelopes: true, investments: true, credits: true,
   });
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
 
-  /** Застосовує тему і зберігає в localStorage */
+  useEffect(() => {
+    // Тема з localStorage
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark" || saved === "light") setTheme(saved);
+    else setTheme("system");
+
+    // Профільні налаштування з БД
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: profile } = await supabase
+        .from("profiles").select("currency, modules, envelope_mode").eq("id", data.user.id).single();
+      if (profile) {
+        if (profile.currency) setCurrency(profile.currency);
+        if (profile.modules)  setModules({ ...modules, ...profile.modules });
+        setEnvelopeMode(profile.envelope_mode ?? false);
+      }
+    });
+  }, []);
+
   function applyTheme(t: "light" | "dark" | "system") {
     setTheme(t);
     if (t === "dark") {
@@ -173,12 +163,23 @@ function AppearanceTab() {
     }
   }
 
-  const moduleList = [
-    { key: "budget",      label: "Особистий бюджет", desc: "Доходи, витрати, категорії",      required: true },
-    { key: "household",   label: "Сімейний бюджет",  desc: "Спільний бюджет з родиною" },
-    { key: "envelopes",   label: "Конверти",          desc: "Розподіл бюджету по конвертах" },
-    { key: "collections", label: "Колекції",          desc: "Нумізматика, антикваріат, мистецтво" },
-    { key: "crypto",      label: "Крипто & Метали",   desc: "Bitcoin, золото, срібло" },
+  async function saveProfile() {
+    setSaving(true); setSaveMsg("");
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) { setSaving(false); return; }
+    const { error } = await supabase.from("profiles")
+      .update({ currency, modules, envelope_mode: envelopeMode }).eq("id", data.user.id);
+    setSaveMsg(error ? "Помилка" : "Збережено");
+    setSaving(false);
+    setTimeout(() => setSaveMsg(""), 3000);
+  }
+
+  const moduleList: { key: keyof Modules; label: string; desc: string; required?: boolean }[] = [
+    { key: "budget",      label: "Бюджет",             desc: "Планування план/факт по категоріях", required: true },
+    { key: "credits",     label: "Кредити & Депозити", desc: "Кредити, розстрочки, депозити" },
+    { key: "investments", label: "Інвестиції",          desc: "Акції, облігації, ETF" },
+    { key: "envelopes",   label: "Конверти",            desc: "Метод конвертів для розподілу бюджету" },
+    { key: "household",   label: "Сімейний бюджет",    desc: "Спільний бюджет з родиною" },
   ];
 
   const themeOptions = [
@@ -189,15 +190,13 @@ function AppearanceTab() {
 
   return (
     <div className="space-y-4">
-      <Section title="Тема оформлення" desc="Визначає зовнішній вигляд додатку">
+      <Section title="Тема оформлення">
         <div className="grid grid-cols-3 gap-3">
           {themeOptions.map(({ val, label, icon }) => (
             <button key={val} onClick={() => applyTheme(val as typeof theme)}
               className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                theme === val
-                  ? "border-orange-400 bg-orange-50 dark:bg-orange-950/30"
-                  : "border-neutral-100 dark:border-neutral-800 hover:border-neutral-200 dark:hover:border-neutral-700"
-              }`}>
+                theme === val ? "border-orange-400 bg-orange-50 dark:bg-orange-950/30"
+                : "border-neutral-100 dark:border-neutral-800 hover:border-neutral-200 dark:hover:border-neutral-700"}`}>
               <Icon d={icon} className={`w-5 h-5 ${theme === val ? "text-orange-400" : "text-neutral-400"}`} />
               <span className={`text-sm font-medium ${theme === val ? "text-orange-500" : "text-neutral-600 dark:text-neutral-400"}`}>{label}</span>
             </button>
@@ -206,26 +205,31 @@ function AppearanceTab() {
       </Section>
 
       <Section title="Базова валюта" desc="Всі суми відображаються в цій валюті">
-        <Select
-          label="Валюта"
-          value={currency}
-          onChange={e => setCurrency(e.target.value)}
+        <Select label="Валюта" value={currency} onChange={e => setCurrency(e.target.value)}
           options={[
             { value: "UAH", label: "₴ UAH — Гривня" },
             { value: "USD", label: "$ USD — Долар" },
             { value: "EUR", label: "€ EUR — Євро" },
-          ]}
+          ]} />
+      </Section>
+
+      <Section title="Бюджетування">
+        <ToggleRow
+          label="Метод конвертів"
+          desc="Розподіл доходу на обов'язкові + тижневі конверти. План у Бюджеті береться з конвертів."
+          checked={envelopeMode}
+          onChange={v => setEnvelopeMode(v)}
         />
       </Section>
 
-      <Section title="Модулі" desc="Увімкніть або вимкніть розділи додатку">
+      <Section title="Модулі" desc="Увімкніть або вимкніть розділи — вони зникнуть з навігації">
         <div className="space-y-4 divide-y divide-neutral-50 dark:divide-neutral-800">
-          {moduleList.map(({ key, label, desc, required }) => (
-            <div key={key} className="pt-4 first:pt-0">
+          {moduleList.map(({ key, label, desc, required }, i) => (
+            <div key={key} className={i > 0 ? "pt-4" : ""}>
               <ToggleRow
                 label={label}
                 desc={required ? `${desc} · обов'язковий` : desc}
-                checked={modules[key as keyof typeof modules]}
+                checked={modules[key]}
                 onChange={v => !required && setModules(m => ({ ...m, [key]: v }))}
                 disabled={required}
               />
@@ -233,233 +237,144 @@ function AppearanceTab() {
           ))}
         </div>
       </Section>
-    </div>
-  );
-}
 
-// ─── 3. Сім'я ─────────────────────────────────────────────────
-
-function FamilyTab() {
-  const [mode, setMode]             = useState<"solo" | "family">("solo");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [copied, setCopied]         = useState(false);
-
-  const members = [
-    { name: "Ігор Стефанів",  email: "igor@example.com",  role: "Власник",     status: "active"  },
-    { name: "Софія Стефанів", email: "sofia@example.com", role: "Член сім'ї",  status: "pending" },
-  ];
-
-  function copyLink() {
-    navigator.clipboard.writeText("https://ubudget.app/invite/abc123xyz");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  const modeOptions = [
-    { val: "solo",   label: "Соло",     desc: "Тільки ви",            icon: icons.user },
-    { val: "family", label: "Сімейний", desc: "Ви + члени сім'ї",     icon: icons.home },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <Section title="Режим використання">
-        <div className="grid grid-cols-2 gap-3">
-          {modeOptions.map(({ val, label, desc, icon }) => (
-            <button key={val} onClick={() => setMode(val as typeof mode)}
-              className={`flex flex-col items-start gap-3 p-4 rounded-xl border-2 transition-all text-left ${
-                mode === val
-                  ? "border-orange-400 bg-orange-50 dark:bg-orange-950/30"
-                  : "border-neutral-100 dark:border-neutral-800 hover:border-neutral-200 dark:hover:border-neutral-700"
-              }`}>
-              <Icon d={icon} className={`w-5 h-5 ${mode === val ? "text-orange-400" : "text-neutral-400"}`} />
-              <div>
-                <p className={`text-sm font-semibold ${mode === val ? "text-orange-500" : "text-neutral-800 dark:text-neutral-200"}`}>{label}</p>
-                <p className="text-xs text-neutral-400 mt-0.5">{desc}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      {mode === "family" && (
-        <>
-          <Section title="Запросити члена сім'ї" desc="Вони отримають доступ до спільного сімейного бюджету">
-            <Input label="Email" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="email@example.com" />
-            <Button fullWidth>Надіслати запрошення</Button>
-
-            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
-              <p className="text-xs font-medium text-neutral-500 mb-2">Або поділіться посиланням</p>
-              <div className="flex gap-2">
-                <div className="flex-1 px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-500 truncate">
-                  ubudget.app/invite/abc123xyz
-                </div>
-                <Button variant={copied ? "secondary" : "secondary"} onClick={copyLink}>
-                  {copied ? "✓ Скопійовано" : "Копіювати"}
-                </Button>
-              </div>
-            </div>
-          </Section>
-
-          <Section title="Члени сім'ї">
-            <div className="space-y-1">
-              {members.map(m => (
-                <div key={m.email} className="flex items-center justify-between py-2.5 border-b border-neutral-50 dark:border-neutral-800/50 last:border-0">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-950 flex items-center justify-center text-orange-500 text-xs font-bold shrink-0">
-                      {m.name[0]}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{m.name}</p>
-                      <p className="text-xs text-neutral-400">{m.email} · {m.role}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge color={m.status === "active" ? "green" : "amber"}>
-                      {m.status === "active" ? "Активний" : "Очікує"}
-                    </Badge>
-                    {m.role !== "Власник" && (
-                      <Button variant="ghost" size="sm">
-                        <Icon d={icons.close} className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Section>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── 4. Сповіщення ────────────────────────────────────────────
-
-function NotificationsTab() {
-  const [email, setEmail]         = useState({ weekly: true, monthly: true, tips: false });
-  const [reminders, setReminders] = useState({ payments: true, noIncome: true, budgetOver: true, goals: false });
-
-  return (
-    <div className="space-y-4">
-      <Section title="Email розсилка" desc="Фінансові звіти на вашу пошту">
-        <div className="space-y-4 divide-y divide-neutral-50 dark:divide-neutral-800">
-          <ToggleRow label="Щотижневий звіт"    desc="Підсумок тижня щонеділі"              checked={email.weekly}   onChange={v => setEmail(s => ({ ...s, weekly: v }))} />
-          <div className="pt-4"><ToggleRow label="Щомісячний звіт"   desc="Детальний звіт в кінці місяця"          checked={email.monthly}  onChange={v => setEmail(s => ({ ...s, monthly: v }))} /></div>
-          <div className="pt-4"><ToggleRow label="Поради та лайфхаки" desc="Корисні фінансові поради"              checked={email.tips}     onChange={v => setEmail(s => ({ ...s, tips: v }))} /></div>
-        </div>
-      </Section>
-
-      <Section title="Нагадування" desc="Сповіщення про важливі події">
-        <div className="space-y-4 divide-y divide-neutral-50 dark:divide-neutral-800">
-          <ToggleRow label="Платежі та кредити"    desc="Нагадування перед датою платежу"                  checked={reminders.payments}   onChange={v => setReminders(s => ({ ...s, payments: v }))} />
-          <div className="pt-4"><ToggleRow label="Дні без доходу"       desc="Якщо дохід не вносився більше 30 днів"   checked={reminders.noIncome}   onChange={v => setReminders(s => ({ ...s, noIncome: v }))} /></div>
-          <div className="pt-4"><ToggleRow label="Перевищення бюджету"  desc="Коли витрати перевищують план"           checked={reminders.budgetOver} onChange={v => setReminders(s => ({ ...s, budgetOver: v }))} /></div>
-          <div className="pt-4"><ToggleRow label="Прогрес цілей"        desc="Щомісячний звіт по фінансових цілях"    checked={reminders.goals}      onChange={v => setReminders(s => ({ ...s, goals: v }))} /></div>
-        </div>
-      </Section>
-
-      <div className="flex justify-end">
-        <Button>Зберегти</Button>
+      <div className="flex items-center gap-3">
+        <Button onClick={saveProfile} disabled={saving}>{saving ? "Збереження..." : "Зберегти"}</Button>
+        {saveMsg && <span className={`text-sm ${saveMsg === "Збережено" ? "text-green-500" : "text-red-500"}`}>{saveMsg}</span>}
       </div>
     </div>
   );
 }
 
-// ─── 5. Безпека & Дані ────────────────────────────────────────
+// ─── 3. Сповіщення ────────────────────────────────────────────
+type NotifState = {
+  weekly: boolean; monthly: boolean; tips: boolean;
+  payments: boolean; noIncome: boolean; budgetOver: boolean; goals: boolean;
+};
 
-function SecurityTab() {
-  const [resetInput, setResetInput] = useState("");
-  const [showReset, setShowReset]   = useState(false);
-  const [inviteValue, setInviteValue] = useState("");
+function NotificationsTab() {
+  const supabase = createClient();
+  const [notif, setNotif] = useState<NotifState>({
+    weekly: true, monthly: true, tips: false,
+    payments: true, noIncome: true, budgetOver: true, goals: false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
 
-  const logs = [
-    { action: "Вхід",         device: "Chrome · Windows", location: "Стрий, UA",  time: "Сьогодні, 14:23" },
-    { action: "Вхід",         device: "Safari · iPhone",  location: "Львів, UA",  time: "Вчора, 09:41" },
-    { action: "Зміна пароля", device: "Chrome · Windows", location: "Стрий, UA",  time: "3 дні тому" },
-  ];
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: profile } = await supabase
+        .from("profiles").select("notifications").eq("id", data.user.id).single();
+      if (profile?.notifications) setNotif(n => ({ ...n, ...profile.notifications }));
+    });
+  }, []);
 
-  const actions = [
-    { action: "Додав рахунок",     detail: "Monobank · Дебетова",   time: "Сьогодні, 13:10", type: "add" },
-    { action: "Змінив баланс",     detail: "Готівка · Гаманець",    time: "Сьогодні, 11:45", type: "edit" },
-    { action: "Видалив транзакцію",detail: "Сільпо · -840 грн",     time: "Вчора, 18:22",    type: "delete" },
-    { action: "Додав ціль",        detail: "Подорож до Туреччини",  time: "Вчора, 10:05",    type: "add" },
-  ];
+  async function save() {
+    setSaving(true); setSaveMsg("");
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) { setSaving(false); return; }
+    const { error } = await supabase.from("profiles")
+      .update({ notifications: notif }).eq("id", data.user.id);
+    setSaveMsg(error ? "Помилка" : "Збережено");
+    setSaving(false);
+    setTimeout(() => setSaveMsg(""), 3000);
+  }
 
-  const actionColors = {
-    add:    "green" as const,
-    edit:   "blue"  as const,
-    delete: "red"   as const,
-  };
-  const actionLabels = { add: "Додав", edit: "Змінив", delete: "Видалив" };
+  const toggle = (key: keyof NotifState) => setNotif(s => ({ ...s, [key]: !s[key] }));
 
   return (
     <div className="space-y-4">
-      {/* Лог входів */}
-      <Section title="Лог активності" desc="Останні входи у ваш акаунт">
-        <div className="space-y-1">
-          {logs.map((log, i) => (
-            <div key={i} className="flex items-center justify-between py-2.5 border-b border-neutral-50 dark:border-neutral-800/50 last:border-0">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0">
-                  <Icon d={log.action === "Вхід" ? icons.logout : icons.lock} className="w-3.5 h-3.5 text-neutral-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{log.action}</p>
-                  <p className="text-xs text-neutral-400">{log.device} · {log.location}</p>
-                </div>
-              </div>
-              <span className="text-xs text-neutral-400 shrink-0 ml-2">{log.time}</span>
-            </div>
-          ))}
+      <Section title="Email розсилка" desc="Фінансові звіти на вашу пошту">
+        <div className="space-y-4 divide-y divide-neutral-50 dark:divide-neutral-800">
+          <ToggleRow label="Щотижневий звіт"    desc="Підсумок тижня щонеділі"            checked={notif.weekly}   onChange={() => toggle("weekly")} />
+          <div className="pt-4"><ToggleRow label="Щомісячний звіт"   desc="Детальний звіт в кінці місяця"      checked={notif.monthly}  onChange={() => toggle("monthly")} /></div>
+          <div className="pt-4"><ToggleRow label="Поради та лайфхаки" desc="Корисні фінансові поради"          checked={notif.tips}     onChange={() => toggle("tips")} /></div>
         </div>
       </Section>
 
-      {/* Останні дії */}
-      <Section title="Останні дії" desc="Що ви додавали, змінювали або видаляли">
-        <div className="space-y-1">
-          {actions.map((a, i) => (
-            <div key={i} className="flex items-center justify-between py-2.5 border-b border-neutral-50 dark:border-neutral-800/50 last:border-0">
-              <div className="flex items-center gap-3">
-                <Badge color={actionColors[a.type as keyof typeof actionColors]}>
-                  {actionLabels[a.type as keyof typeof actionLabels]}
-                </Badge>
-                <div>
-                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{a.action}</p>
-                  <p className="text-xs text-neutral-400">{a.detail}</p>
-                </div>
-              </div>
-              <span className="text-xs text-neutral-400 shrink-0 ml-2">{a.time}</span>
-            </div>
-          ))}
+      <Section title="Нагадування" desc="Сповіщення про важливі події">
+        <div className="space-y-4 divide-y divide-neutral-50 dark:divide-neutral-800">
+          <ToggleRow label="Платежі та кредити"   desc="Нагадування перед датою платежу"          checked={notif.payments}   onChange={() => toggle("payments")} />
+          <div className="pt-4"><ToggleRow label="Дні без доходу"      desc="Якщо дохід не вносився більше 30 днів"  checked={notif.noIncome}   onChange={() => toggle("noIncome")} /></div>
+          <div className="pt-4"><ToggleRow label="Перевищення бюджету" desc="Коли витрати перевищують план"          checked={notif.budgetOver} onChange={() => toggle("budgetOver")} /></div>
+          <div className="pt-4"><ToggleRow label="Прогрес цілей"       desc="Щомісячний звіт по фінансових цілях"   checked={notif.goals}      onChange={() => toggle("goals")} /></div>
         </div>
       </Section>
 
-      {/* Запросити друга */}
-      <Section title="Запросити друга" desc="Поділіться UBudget з друзями">
-        <div className="flex gap-2">
-          <Input value={inviteValue} onChange={e => setInviteValue(e.target.value)} placeholder="Email або телефон" />
-          <Button>Запросити</Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-px bg-neutral-100 dark:bg-neutral-800" />
-          <span className="text-xs text-neutral-400">або</span>
-          <div className="flex-1 h-px bg-neutral-100 dark:bg-neutral-800" />
-        </div>
-        <div className="flex gap-2">
-          <div className="flex-1 px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-400 truncate">
-            ubudget.app/ref/igor123
-          </div>
-          <Button variant="secondary">Копіювати</Button>
+      <div className="flex items-center gap-3">
+        <Button onClick={save} disabled={saving}>{saving ? "Збереження..." : "Зберегти"}</Button>
+        {saveMsg && <span className={`text-sm ${saveMsg === "Збережено" ? "text-green-500" : "text-red-500"}`}>{saveMsg}</span>}
+        <span className="text-xs text-neutral-400">Налаштування зберігаються для майбутньої системи сповіщень</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── 4. Безпека & Дані ────────────────────────────────────────
+function SecurityTab() {
+  const supabase = createClient();
+  const [resetInput, setResetInput] = useState("");
+  const [showReset, setShowReset]   = useState(false);
+  const [resetting, setResetting]   = useState(false);
+  const [resetMsg, setResetMsg]     = useState("");
+
+  async function handleReset() {
+    if (resetInput !== "ОБНУЛИТИ") return;
+    setResetting(true);
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) { setResetting(false); return; }
+    const uid = data.user.id;
+
+    try {
+      // Видаляємо всі дані юзера по всіх таблицях
+      await Promise.all([
+        supabase.from("transactions").delete().eq("user_id", uid),
+        supabase.from("accounts").delete().eq("user_id", uid),
+        supabase.from("budgets").delete().eq("user_id", uid),
+        supabase.from("credits").delete().eq("user_id", uid),
+        supabase.from("envelope_settings").delete().eq("user_id", uid),
+        supabase.from("envelope_weeks").delete().eq("user_id", uid),
+        supabase.from("envelope_income_sources").delete().eq("user_id", uid),
+      ]);
+      // Категорії (merchants і subcategories каскадно)
+      await supabase.from("merchants").delete().in("category_id",
+        (await supabase.from("categories").select("id").eq("user_id", uid)).data?.map(c => c.id) ?? []
+      );
+      await supabase.from("subcategories").delete().eq("user_id", uid);
+      await supabase.from("categories").delete().eq("user_id", uid);
+
+      setResetMsg("Дані видалено");
+      setShowReset(false);
+      setResetInput("");
+    } catch {
+      setResetMsg("Помилка при видаленні");
+    }
+    setResetting(false);
+    setTimeout(() => setResetMsg(""), 5000);
+  }
+
+  return (
+    <div className="space-y-4">
+      <Section title="Сесії та доступ" desc="Управління активними сесіями">
+        <div className="py-6 text-center">
+          <p className="text-sm text-neutral-400">Лог активних сесій буде доступний незабаром</p>
+          <button onClick={() => supabase.auth.signOut()}
+            className="mt-3 text-sm text-red-400 hover:text-red-500 font-medium transition-colors">
+            Завершити всі сесії
+          </button>
         </div>
       </Section>
 
-      {/* Небезпечна зона */}
       <Section title="Небезпечна зона">
+        {resetMsg && (
+          <div className={`px-4 py-3 rounded-xl text-sm font-medium ${resetMsg === "Дані видалено" ? "bg-green-50 dark:bg-green-950/20 text-green-600" : "bg-red-50 dark:bg-red-950/20 text-red-600"}`}>
+            {resetMsg}
+          </div>
+        )}
         {!showReset ? (
-          <button
-            onClick={() => setShowReset(true)}
-            className="w-full py-2.5 rounded-xl border-2 border-red-200 dark:border-red-900/50 text-red-500 text-sm font-semibold hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-          >
+          <button onClick={() => setShowReset(true)}
+            className="w-full py-2.5 rounded-xl border-2 border-red-200 dark:border-red-900/50 text-red-500 text-sm font-semibold hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors">
             Обнулити фінансові дані
           </button>
         ) : (
@@ -467,9 +382,9 @@ function SecurityTab() {
             <div className="flex items-start gap-3">
               <Icon d={icons.warn} className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-red-600 dark:text-red-400">Увага!</p>
+                <p className="text-sm font-semibold text-red-600 dark:text-red-400">Увага! Незворотна дія</p>
                 <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
-                  Буде видалено всі рахунки, транзакції, бюджети та цілі. Профіль залишиться.
+                  Буде видалено: всі транзакції, рахунки, бюджети, кредити, категорії, конверти. Профіль залишиться.
                 </p>
               </div>
             </div>
@@ -477,19 +392,15 @@ function SecurityTab() {
               <label className="text-xs font-medium text-red-600 dark:text-red-400">
                 Введіть <span className="font-bold">ОБНУЛИТИ</span> для підтвердження
               </label>
-              <Input
-                value={resetInput}
-                onChange={e => setResetInput(e.target.value)}
-                placeholder="ОБНУЛИТИ"
-                className="border-red-200 dark:border-red-800 focus:border-red-400"
-              />
+              <Input value={resetInput} onChange={e => setResetInput(e.target.value)} placeholder="ОБНУЛИТИ" />
             </div>
             <div className="flex gap-2">
               <Button variant="secondary" fullWidth onClick={() => { setShowReset(false); setResetInput(""); }}>
                 Скасувати
               </Button>
-              <Button variant="danger" fullWidth disabled={resetInput !== "ОБНУЛИТИ"}>
-                Обнулити
+              <Button variant="danger" fullWidth disabled={resetInput !== "ОБНУЛИТИ" || resetting}
+                onClick={handleReset}>
+                {resetting ? "Видалення..." : "Обнулити"}
               </Button>
             </div>
           </div>
@@ -500,17 +411,14 @@ function SecurityTab() {
 }
 
 // ─── Tabs config ──────────────────────────────────────────────
-
 const tabs: { id: Tab; label: string; icon: string }[] = [
-  { id: "profile",       label: "Профіль",     icon: icons.user },
-  { id: "appearance",    label: "Вигляд",      icon: icons.sun },
-  { id: "family",        label: "Сім'я",       icon: icons.home },
-  { id: "notifications", label: "Сповіщення",  icon: icons.warn },
-  { id: "security",      label: "Безпека",     icon: icons.lock },
+  { id: "profile",       label: "Профіль",    icon: icons.user },
+  { id: "appearance",    label: "Вигляд",     icon: icons.sun },
+  { id: "notifications", label: "Сповіщення", icon: icons.warn },
+  { id: "security",      label: "Безпека",    icon: icons.lock },
 ];
 
 // ─── PAGE ─────────────────────────────────────────────────────
-
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("profile");
 
@@ -521,29 +429,22 @@ export default function SettingsPage() {
         <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">Керуйте своїм акаунтом та перевагами</p>
       </div>
 
-      {/* Таби */}
       <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800/50 p-1 rounded-2xl overflow-x-auto">
         {tabs.map(({ id, label, icon }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id)}
+          <button key={id} onClick={() => setActiveTab(id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200 ${
               activeTab === id
                 ? "bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 shadow-sm"
-                : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
-            }`}
-          >
+                : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"}`}>
             <Icon d={icon} className="w-4 h-4 shrink-0" />
             {label}
           </button>
         ))}
       </div>
 
-      {/* Контент табу */}
       <div>
         {activeTab === "profile"       && <ProfileTab />}
         {activeTab === "appearance"    && <AppearanceTab />}
-        {activeTab === "family"        && <FamilyTab />}
         {activeTab === "notifications" && <NotificationsTab />}
         {activeTab === "security"      && <SecurityTab />}
       </div>

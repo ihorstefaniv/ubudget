@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/lib/auth";
 import TransactionModal from "@/components/TransactionModal";
 import { Icon, icons } from "@/components/ui";
+import { FeaturesProvider } from "@/lib/features-context";
 
 /** Версія білду — оновлюй при кожному релізі */
 const APP_VERSION = "v1.2.0";
@@ -58,16 +59,16 @@ function ThemeToggle() {
 
 // ─── Nav config ───────────────────────────────────────────────
 
-/** Основні пункти навігації */
-const mainNav = [
-  { href: "/dashboard",    label: "Дашборд",           icon: "home" as const },
-  { href: "/transactions", label: "Транзакції",         icon: "wallet" as const },
-  { href: "/accounts",     label: "Рахунки",            icon: "bank" as const },
-  { href: "/credits",      label: "Кредити & Депозити", icon: "creditCard" as const },
-  { href: "/investments",  label: "Інвестиції",         icon: "trendUp" as const },
-  { href: "/envelopes",    label: "Конверти",           icon: "envelope" as const },
-  { href: "/budget",       label: "Бюджет",             icon: "chart" as const },
-  { href: "/household",    label: "Сімейний бюджет",    icon: "user" as const },
+/** Всі можливі пункти навігації з ключем модуля (null = завжди видимий) */
+const allNavItems: { href: string; label: string; icon: "home"|"wallet"|"bank"|"creditCard"|"trendUp"|"envelope"|"chart"|"user"; moduleKey: string | null }[] = [
+  { href: "/dashboard",    label: "Дашборд",           icon: "home",       moduleKey: null },
+  { href: "/transactions", label: "Транзакції",         icon: "wallet",     moduleKey: null },
+  { href: "/accounts",     label: "Рахунки",            icon: "bank",       moduleKey: null },
+  { href: "/budget",       label: "Бюджет",             icon: "chart",      moduleKey: "budget" },
+  { href: "/credits",      label: "Кредити & Депозити", icon: "creditCard", moduleKey: "credits" },
+  { href: "/investments",  label: "Інвестиції",         icon: "trendUp",    moduleKey: "investments" },
+  { href: "/envelopes",    label: "Конверти",           icon: "envelope",   moduleKey: "envelopes" },
+  { href: "/household",    label: "Сімейний бюджет",    icon: "user",       moduleKey: "household" },
 ];
 
 /** Підменю Інструменти */
@@ -88,6 +89,7 @@ const toolsNav = [
 interface SidebarContentProps {
   pathname: string;
   userName: string;
+  modules: Record<string, boolean>;
   /** Колбек закриття — є тільки в мобільному варіанті */
   onClose?: () => void;
 }
@@ -95,7 +97,10 @@ interface SidebarContentProps {
 /**
  * Вміст сайдбару — використовується і в десктопному і в мобільному варіанті.
  */
-function SidebarContent({ pathname, userName, onClose }: SidebarContentProps) {
+function SidebarContent({ pathname, userName, modules, onClose }: SidebarContentProps) {
+  const mainNav = allNavItems.filter(item =>
+    item.moduleKey === null || (modules[item.moduleKey] ?? true)
+  );
   const router = useRouter();
 
   /** Розгорнути підменю якщо зараз активна сторінка з /tools */
@@ -309,11 +314,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen]   = useState(false);
   const [userName, setUserName]       = useState("Користувач");
   const [showTxModal, setShowTxModal] = useState(false);
+  const [modules, setModules]         = useState<Record<string, boolean>>({
+    budget: true, credits: true, investments: true, envelopes: true, household: true,
+  });
 
-  // Завантажуємо ім'я юзера і перевіряємо авторизацію
+  // Завантажуємо ім'я юзера, перевіряємо авторизацію і завантажуємо модулі
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) {
         router.push("/login");
         return;
@@ -323,6 +331,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         data.user.email?.split("@")[0] ||
         "Користувач";
       setUserName(name);
+
+      const { data: profile } = await supabase
+        .from("profiles").select("full_name, modules").eq("id", data.user.id).single();
+      if (profile?.full_name) setUserName(profile.full_name);
+      if (profile?.modules)   setModules(m => ({ ...m, ...profile.modules }));
     });
   }, [router]);
 
@@ -332,11 +345,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
+    <FeaturesProvider>
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex">
 
       {/* ── Десктопний сайдбар (фіксований, 240px) ── */}
       <aside className="hidden lg:flex flex-col w-60 shrink-0 fixed inset-y-0 left-0 bg-white dark:bg-neutral-900 border-r border-neutral-100 dark:border-neutral-800 z-30">
-        <SidebarContent pathname={pathname} userName={userName} />
+        <SidebarContent pathname={pathname} userName={userName} modules={modules} />
       </aside>
 
       {/* ── Мобільний overlay (затемнення) ── */}
@@ -356,6 +370,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent
           pathname={pathname}
           userName={userName}
+          modules={modules}
           onClose={() => setMobileOpen(false)}
         />
       </aside>
@@ -414,5 +429,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
     </div>
+    </FeaturesProvider>
   );
 }
