@@ -275,18 +275,33 @@ export default function AdminUsersPage() {
 
       if (pErr) throw new Error(pErr.message);
 
-      // Якщо SERVICE_ROLE_KEY не налаштований — authUsers буде []
-      const emailMap       = new Map(authUsers.map((u: { id: string; email: string }) => [u.id, u.email]));
-      const lastSignInMap  = new Map(authUsers.map((u: { id: string; last_sign_in_at: string | null }) => [u.id, u.last_sign_in_at]));
+      const profileMap = new Map(
+        (profiles ?? []).map((p: { id: string; full_name: string | null; role: string; created_at: string; updated_at: string }) => [p.id, p])
+      );
 
-      // Загальна кількість з auth (точніша ніж profiles)
-      if (authUsers.length > 0) setAuthTotal(authUsers.length);
-
-      setUsers((profiles ?? []).map((p: { id: string; full_name: string | null; role: string; created_at: string; updated_at: string }) => ({
-        ...p,
-        email:            emailMap.get(p.id) ?? "(email недоступний — додай SERVICE_ROLE_KEY)",
-        last_sign_in_at:  lastSignInMap.get(p.id) ?? null,
-      })));
+      if (authUsers.length > 0) {
+        // Використовуємо auth-юзерів як джерело правди — жоден не загубиться
+        setAuthTotal(authUsers.length);
+        setUsers(authUsers.map((u: { id: string; email: string; created_at: string; last_sign_in_at: string | null }) => {
+          const p = profileMap.get(u.id);
+          return {
+            id:             u.id,
+            full_name:      p?.full_name ?? null,
+            email:          u.email,
+            role:           p?.role ?? "user",
+            created_at:     p?.created_at ?? u.created_at,
+            updated_at:     p?.updated_at ?? u.created_at,
+            last_sign_in_at: u.last_sign_in_at,
+          };
+        }));
+      } else {
+        // SERVICE_ROLE_KEY не налаштований — показуємо profiles з заглушкою email
+        setUsers((profiles ?? []).map((p: { id: string; full_name: string | null; role: string; created_at: string; updated_at: string }) => ({
+          ...p,
+          email:           "(email недоступний — додай SERVICE_ROLE_KEY)",
+          last_sign_in_at: null,
+        })));
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Невідома помилка";
       setLoadErr(msg);
