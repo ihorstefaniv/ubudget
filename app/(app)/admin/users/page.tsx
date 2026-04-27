@@ -7,7 +7,10 @@ import { getUsersWithEmails } from "../actions/admin-users";
 import { useAdminRole } from "../layout";
 import { can } from "@/lib/permissions";
 
-interface UserRow { id: string; full_name: string | null; email: string; role: string; created_at: string; updated_at: string; }
+interface UserRow {
+  id: string; full_name: string | null; email: string; role: string;
+  created_at: string; updated_at: string; last_sign_in_at: string | null;
+}
 type StatusKey = "all" | "new" | "active" | "loyal" | "inactive" | "blocked";
 
 const GRADES: Record<string, string> = {
@@ -17,11 +20,13 @@ const GRADES: Record<string, string> = {
 
 function getStatus(u: UserRow): StatusKey {
   if (u.role === "blocked") return "blocked";
-  const daysOld    = (Date.now() - new Date(u.created_at).getTime()) / 86400000;
-  const daysActive = (Date.now() - new Date(u.updated_at).getTime()) / 86400000;
+  const daysOld = (Date.now() - new Date(u.created_at).getTime()) / 86400000;
+  // Використовуємо last_sign_in_at (реальний останній вхід), а не updated_at профілю
+  const lastSeen = u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : new Date(u.created_at).getTime();
+  const daysIdle = (Date.now() - lastSeen) / 86400000;
   if (daysOld < 14) return "new";
-  if (daysOld > 180 && daysActive < 30) return "loyal";
-  if (daysActive < 30) return "active";
+  if (daysOld > 180 && daysIdle < 30) return "loyal";
+  if (daysIdle < 30) return "active";
   return "inactive";
 }
 
@@ -194,9 +199,11 @@ function UserDrawer({ user, onClose, onUpdate, isSuperadmin }: {
 
           <div className="space-y-2.5 text-sm border border-neutral-100 rounded-xl p-4">
             {[
-              ["Реєстрація", new Date(user.created_at).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" })],
-              ["У системі",  `${daysOld} днів`],
-              ["Активність", new Date(user.updated_at).toLocaleDateString("uk-UA")],
+              ["Реєстрація",    new Date(user.created_at).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" })],
+              ["У системі",    `${daysOld} днів`],
+              ["Останній вхід", user.last_sign_in_at
+                ? new Date(user.last_sign_in_at).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" })
+                : "—"],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between">
                 <span className="text-neutral-400">{k}</span>
@@ -244,6 +251,7 @@ export default function AdminUsersPage() {
   const role = useAdminRole();
 
   const [users, setUsers]           = useState<UserRow[]>([]);
+  const [authTotal, setAuthTotal]   = useState<number | null>(null);
   const [loading, setLoading]       = useState(true);
   const [loadErr, setLoadErr]       = useState("");
   const [filter, setFilter]         = useState<StatusKey>("all");
@@ -268,11 +276,16 @@ export default function AdminUsersPage() {
       if (pErr) throw new Error(pErr.message);
 
       // Якщо SERVICE_ROLE_KEY не налаштований — authUsers буде []
-      const emailMap = new Map(authUsers.map((u: { id: string; email: string }) => [u.id, u.email]));
+      const emailMap       = new Map(authUsers.map((u: { id: string; email: string }) => [u.id, u.email]));
+      const lastSignInMap  = new Map(authUsers.map((u: { id: string; last_sign_in_at: string | null }) => [u.id, u.last_sign_in_at]));
+
+      // Загальна кількість з auth (точніша ніж profiles)
+      if (authUsers.length > 0) setAuthTotal(authUsers.length);
 
       setUsers((profiles ?? []).map((p: { id: string; full_name: string | null; role: string; created_at: string; updated_at: string }) => ({
         ...p,
-        email: emailMap.get(p.id) ?? "(email недоступний — додай SERVICE_ROLE_KEY)",
+        email:            emailMap.get(p.id) ?? "(email недоступний — додай SERVICE_ROLE_KEY)",
+        last_sign_in_at:  lastSignInMap.get(p.id) ?? null,
       })));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Невідома помилка";
@@ -319,7 +332,7 @@ export default function AdminUsersPage() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-xl font-bold text-neutral-900">Користувачі</h1>
-            <p className="text-sm text-neutral-400 mt-0.5">{users.length} в системі</p>
+            <p className="text-sm text-neutral-400 mt-0.5">{authTotal ?? users.length} в системі</p>
           </div>
           <div className="flex items-center gap-2">
             {isSuperadmin && (
