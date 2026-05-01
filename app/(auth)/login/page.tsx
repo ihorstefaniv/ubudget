@@ -4,6 +4,21 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "@/lib/auth";
+import { logActivity } from "@/lib/activity-log";
+
+function parseDevice(ua: string) {
+  const device =
+    /iPhone|iPad/.test(ua) ? "iPhone / iPad" :
+    /Android/.test(ua)     ? "Android"        :
+    /Macintosh/.test(ua)   ? "Mac"            :
+    /Windows/.test(ua)     ? "Windows"        : "Невідомий пристрій";
+  const browser =
+    /Edg\//.test(ua)     ? "Edge"    :
+    /Chrome\//.test(ua)  ? "Chrome"  :
+    /Firefox\//.test(ua) ? "Firefox" :
+    /Safari\//.test(ua)  ? "Safari"  : "Browser";
+  return { device, browser };
+}
 
 function IconEye({ show }: { show: boolean }) {
   return show ? (
@@ -40,6 +55,9 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
+
+    const { device, browser } = parseDevice(navigator.userAgent);
+    logActivity("login", `${browser} · ${device}`);
 
     router.push("/dashboard");
     router.refresh();

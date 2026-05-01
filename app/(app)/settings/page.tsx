@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Icon, icons, Input, Select, Toggle, ToggleRow, Card, Button, Badge } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
+import { logActivity } from "@/lib/activity-log";
 
 type Tab = "profile" | "appearance" | "notifications" | "security";
 
@@ -56,6 +57,7 @@ function ProfileTab() {
     const { error } = await supabase.from("profiles")
       .update({ full_name: name.trim(), phone: phone.trim(), birthday: birthday || null })
       .eq("id", data.user.id);
+    if (!error) logActivity("profile_update");
     setSaveMsg(error ? `Помилка: ${error.message}` : "Збережено");
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 3000);
@@ -66,9 +68,9 @@ function ProfileTab() {
     if (newPwd.length < 8) { setPwdMsg("Мінімум 8 символів"); return; }
     setPwdSaving(true); setPwdMsg("");
     const { error } = await supabase.auth.updateUser({ password: newPwd });
+    if (!error) { logActivity("password_change"); setNewPwd(""); setConfirmPwd(""); }
     setPwdMsg(error ? "Помилка: " + error.message : "Пароль змінено");
     setPwdSaving(false);
-    if (!error) { setNewPwd(""); setConfirmPwd(""); }
     setTimeout(() => setPwdMsg(""), 4000);
   }
 
@@ -169,6 +171,7 @@ function AppearanceTab() {
     if (!data.user) { setSaving(false); return; }
     const { error } = await supabase.from("profiles")
       .update({ currency, modules, envelope_mode: envelopeMode }).eq("id", data.user.id);
+    if (!error) logActivity("appearance_save");
     setSaveMsg(error ? `Помилка: ${error.message}` : "Збережено");
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 3000);
@@ -276,6 +279,7 @@ function NotificationsTab() {
     if (!data.user) { setSaving(false); return; }
     const { error } = await supabase.from("profiles")
       .update({ notifications: notif }).eq("id", data.user.id);
+    if (!error) logActivity("notifications_save");
     setSaveMsg(error ? `Помилка: ${error.message}` : "Збережено");
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 3000);
@@ -312,12 +316,100 @@ function NotificationsTab() {
 }
 
 // ─── 4. Безпека & Дані ────────────────────────────────────────
+
+interface ActivityItem {
+  id: string; label: string; sub: string; emoji: string; date: string;
+}
+
+const ACTION_MAP: Record<string, { label: string; emoji: string }> = {
+  login:              { label: "Вхід в акаунт",           emoji: "🔐" },
+  profile_update:     { label: "Оновлення профілю",        emoji: "👤" },
+  password_change:    { label: "Зміна пароля",             emoji: "🔑" },
+  appearance_save:    { label: "Налаштування вигляду",     emoji: "🎨" },
+  notifications_save: { label: "Налаштування сповіщень",   emoji: "🔔" },
+  data_reset:         { label: "Обнулення фінансових даних", emoji: "🗑️" },
+};
+
+function parseDevice(ua: string): { device: string; browser: string } {
+  const device =
+    /iPhone|iPad/.test(ua) ? "iPhone / iPad" :
+    /Android/.test(ua)     ? "Android"        :
+    /Macintosh/.test(ua)   ? "Mac"            :
+    /Windows/.test(ua)     ? "Windows"        : "Невідомий пристрій";
+  const browser =
+    /Edg\//.test(ua)    ? "Edge"    :
+    /Chrome\//.test(ua) ? "Chrome"  :
+    /Firefox\//.test(ua)? "Firefox" :
+    /Safari\//.test(ua) ? "Safari"  : "Browser";
+  return { device, browser };
+}
+
 function SecurityTab() {
   const supabase = createClient();
+
+  const [sessionInfo, setSessionInfo] = useState<{
+    email: string; lastSignIn: string; expiresAt: number;
+    device: string; browser: string;
+  } | null>(null);
+
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+
   const [resetInput, setResetInput] = useState("");
   const [showReset, setShowReset]   = useState(false);
   const [resetting, setResetting]   = useState(false);
   const [resetMsg, setResetMsg]     = useState("");
+
+  useEffect(() => {
+    async function load() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { device, browser } = parseDevice(navigator.userAgent);
+        setSessionInfo({
+          email:      session.user.email ?? "",
+          lastSignIn: session.user.last_sign_in_at ?? session.user.created_at,
+          expiresAt:  session.expires_at ?? 0,
+          device, browser,
+        });
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: logs } = await supabase
+          .from("activity_logs")
+          .select("id, action, details, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(20);
+
+        const items: ActivityItem[] = (logs ?? []).map(log => {
+          const meta = ACTION_MAP[log.action] ?? { label: log.action, emoji: "📋" };
+          return {
+            id:    log.id,
+            label: meta.label,
+            sub:   log.details ?? "",
+            emoji: meta.emoji,
+            date:  log.created_at,
+          };
+        });
+        setActivity(items);
+      }
+      setLoadingActivity(false);
+    }
+    load();
+  }, []);
+
+  function fmtDate(iso: string) {
+    return new Date(iso).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  function fmtDateShort(iso: string) {
+    const d = new Date(iso);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diff = Math.floor((today.getTime() - d.getTime()) / 86400000);
+    if (diff === 0) return "Сьогодні";
+    if (diff === 1) return "Вчора";
+    return d.toLocaleDateString("uk-UA", { day: "numeric", month: "short" });
+  }
 
   async function handleReset() {
     if (resetInput !== "ОБНУЛИТИ") return;
@@ -327,7 +419,6 @@ function SecurityTab() {
     const uid = data.user.id;
 
     try {
-      // Видаляємо всі дані юзера по всіх таблицях
       await Promise.all([
         supabase.from("transactions").delete().eq("user_id", uid),
         supabase.from("accounts").delete().eq("user_id", uid),
@@ -337,16 +428,17 @@ function SecurityTab() {
         supabase.from("envelope_weeks").delete().eq("user_id", uid),
         supabase.from("envelope_income_sources").delete().eq("user_id", uid),
       ]);
-      // Категорії (merchants і subcategories каскадно)
       await supabase.from("merchants").delete().in("category_id",
         (await supabase.from("categories").select("id").eq("user_id", uid)).data?.map(c => c.id) ?? []
       );
       await supabase.from("subcategories").delete().eq("user_id", uid);
       await supabase.from("categories").delete().eq("user_id", uid);
 
+      await logActivity("data_reset");
       setResetMsg("Дані видалено");
       setShowReset(false);
       setResetInput("");
+      setActivity([]);
     } catch {
       setResetMsg("Помилка при видаленні");
     }
@@ -356,14 +448,67 @@ function SecurityTab() {
 
   return (
     <div className="space-y-4">
-      <Section title="Сесії та доступ" desc="Управління активними сесіями">
-        <div className="py-6 text-center">
-          <p className="text-sm text-neutral-400">Лог активних сесій буде доступний незабаром</p>
-          <button onClick={() => supabase.auth.signOut()}
-            className="mt-3 text-sm text-red-400 hover:text-red-500 font-medium transition-colors">
-            Завершити всі сесії
-          </button>
-        </div>
+      {/* ── Поточна сесія ── */}
+      <Section title="Поточна сесія" desc="Активний пристрій та час входу">
+        {sessionInfo ? (
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 p-4 rounded-xl border border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40">
+              <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-950/40 flex items-center justify-center text-lg shrink-0">
+                {sessionInfo.device.includes("iPhone") || sessionInfo.device.includes("Android") ? "📱" : "💻"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                    {sessionInfo.browser} · {sessionInfo.device}
+                  </p>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-950/40 text-green-600 dark:text-green-400 font-semibold">
+                    Активна
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-400">
+                  Вхід: {fmtDate(sessionInfo.lastSignIn)}
+                </p>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  {sessionInfo.email}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}
+              className="text-sm text-red-400 hover:text-red-500 font-medium transition-colors"
+            >
+              Завершити сесію
+            </button>
+          </div>
+        ) : (
+          <div className="py-4 text-center">
+            <div className="w-5 h-5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          </div>
+        )}
+      </Section>
+
+      {/* ── Лог активності ── */}
+      <Section title="Остання активність" desc="Останні операції в акаунті">
+        {loadingActivity ? (
+          <div className="py-4 text-center">
+            <div className="w-5 h-5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          </div>
+        ) : activity.length === 0 ? (
+          <p className="text-sm text-neutral-400 text-center py-4">Транзакцій ще немає</p>
+        ) : (
+          <div className="space-y-0 divide-y divide-neutral-50 dark:divide-neutral-800">
+            {activity.map(item => (
+              <div key={item.id} className="flex items-center gap-3 py-2.5">
+                <span className="text-lg shrink-0">{item.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{item.label}</p>
+                  {item.sub && <p className="text-xs text-neutral-400 truncate">{item.sub}</p>}
+                </div>
+                <span className="text-xs text-neutral-400 shrink-0">{fmtDateShort(item.date)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       <Section title="Небезпечна зона">
