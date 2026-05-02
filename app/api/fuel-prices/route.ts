@@ -199,15 +199,9 @@ const FALLBACK_DATA: FuelPricesResponse = {
 
 // ─── GET ──────────────────────────────────────────────────────
 export async function GET() {
-  // 1. Спробуємо живі дані з vseazs.com
-  const live = await scrapeVseazs();
-  if (live) {
-    return NextResponse.json(live, {
-      headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=86400" },
-    });
-  }
+  const headers = { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=86400" };
 
-  // 2. Fallback з Supabase (адмін може оновити без деплою)
+  // 1. Читаємо останній збережений запис з Supabase (оновлюється кроном о 04:00)
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -219,14 +213,16 @@ export async function GET() {
       .eq("id", 1)
       .single();
     if (data?.data) {
-      return NextResponse.json(data.data, {
-        headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=86400" },
-      });
+      return NextResponse.json(data.data, { headers });
     }
   } catch {}
 
+  // 2. Якщо Supabase порожній — скрапимо напряму (перший запуск або cron ще не відпрацював)
+  const live = await scrapeVseazs();
+  if (live) {
+    return NextResponse.json(live, { headers });
+  }
+
   // 3. Статичний fallback
-  return NextResponse.json(FALLBACK_DATA, {
-    headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=86400" },
-  });
+  return NextResponse.json(FALLBACK_DATA, { headers });
 }
