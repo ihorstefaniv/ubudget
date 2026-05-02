@@ -50,7 +50,9 @@ function generateExtendedTrend(baseTrend: TrendPoint[], range: TrendRange): Tren
   const step = Math.max(1, Math.floor(totalPoints / 20));
 
   const result: TrendPoint[] = [];
-  const endDate = new Date("2026-03-19");
+  // Беремо дату останньої точки тренду як кінцеву
+  const [lastDay, lastMonth] = last.date.split(".").map(Number);
+  const endDate = new Date(new Date().getFullYear(), lastMonth - 1, lastDay);
 
   for (let i = totalPoints; i >= 0; i -= step) {
     const d = new Date(endDate);
