@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Button, Toggle } from "@/components/ui";
 import { fmt, dateLabel } from "@/lib/format";
@@ -15,6 +15,8 @@ interface Transaction {
   type: TxType;
   amount: number;
   currency: string;
+  exchange_rate: number;        // UAH за 1 одиницю валюти
+  to_account_id: string | null; // для переказів
   category_key: string;
   account_id: string | null;
   transaction_date: string;
@@ -24,20 +26,17 @@ interface Transaction {
   recurring_interval?: "monthly" | "weekly" | null;
 }
 
-interface Account {
-  id: string;
-  name: string;
-  currency: string;
-  icon?: string;
-}
-
-// ─── Constants ────────────────────────────────────────────────
-
-const CATEGORIES = TX_CATEGORIES; // alias for local use
-
-const CURRENCIES = ["UAH", "USD", "EUR", "PLN"];
+interface Account { id: string; name: string; currency: string; icon?: string; }
 
 // ─── Helpers ──────────────────────────────────────────────────
+
+const CATEGORIES = TX_CATEGORIES;
+const CURRENCIES = ["UAH", "USD", "EUR", "PLN"];
+
+/** Еквівалент у гривнях */
+function toUAH(tx: Pick<Transaction, "amount" | "currency" | "exchange_rate">) {
+  return tx.currency === "UAH" ? tx.amount : tx.amount * (tx.exchange_rate || 1);
+}
 
 function groupByDate(txs: Transaction[]) {
   const groups: Record<string, Transaction[]> = {};
@@ -48,9 +47,9 @@ function groupByDate(txs: Transaction[]) {
   return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
 }
 
-function getCat(type: TxType, key: string) {
-  return getTxCategory(type, key);
-}
+function getCat(type: TxType, key: string) { return getTxCategory(type, key); }
+
+const DEFAULT_RATES: Record<string, number> = { USD: 41, EUR: 44, PLN: 10 };
 
 // ─── Add/Edit Modal ───────────────────────────────────────────
 
@@ -60,21 +59,80 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
   editTx?: Transaction;
   accounts: Account[];
 }) {
-  const [type, setType]             = useState<TxType>(editTx?.type ?? "expense");
-  const [amount, setAmount]         = useState(editTx?.amount.toString() ?? "");
-  const [currency, setCurrency]     = useState(editTx?.currency ?? "UAH");
-  const [category, setCategory]     = useState(editTx?.category_key ?? "");
-  const [accountId, setAccountId]   = useState(editTx?.account_id ?? (accounts[0]?.id ?? ""));
-  const [date, setDate]             = useState(editTx?.transaction_date ?? new Date().toISOString().slice(0, 10));
-  const [note, setNote]             = useState(editTx?.note ?? "");
-  const [repeat, setRepeat]         = useState(editTx?.is_recurring ?? false);
+  const firstAcc = accounts[0];
+
+  const [type, setType]           = useState<TxType>(editTx?.type ?? "expense");
+  const [amount, setAmount]       = useState(editTx?.amount.toString() ?? "");
+  const [currency, setCurrency]   = useState(editTx?.currency ?? firstAcc?.currency ?? "UAH");
+  const [exchangeRate, setExchangeRate] = useState(editTx?.exchange_rate ?? 1);
+  const [category, setCategory]   = useState(editTx?.category_key ?? "");
+  const [accountId, setAccountId] = useState(editTx?.account_id ?? firstAcc?.id ?? "");
+  const [toAccountId, setToAccountId] = useState<string>(
+    editTx?.to_account_id ?? accounts.find(a => a.id !== (editTx?.account_id ?? firstAcc?.id))?.id ?? ""
+  );
+  const [date, setDate]           = useState(editTx?.transaction_date ?? new Date().toISOString().slice(0, 10));
+  const [note, setNote]           = useState(editTx?.note ?? "");
+  const [repeat, setRepeat]       = useState(editTx?.is_recurring ?? false);
   const [repeatPeriod, setRepeatPeriod] = useState<"monthly" | "weekly">(editTx?.recurring_interval ?? "monthly");
-  const [photo, setPhoto]           = useState<string | null>(editTx?.receipt_url ?? null);
-  const [error, setError]           = useState("");
-  const [saving, setSaving]         = useState(false);
+  const [photo, setPhoto]         = useState<string | null>(editTx?.receipt_url ?? null);
+  const [error, setError]         = useState("");
+  const [saving, setSaving]       = useState(false);
+  const [pbRates, setPbRates]     = useState<Record<string, number>>(DEFAULT_RATES);
 
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Курси ПриватБанку (продаж)
+  useEffect(() => {
+    fetch("https://api.privatbank.ua/p24api/pubinfo?exchange&json")
+      .then(r => r.json())
+      .then((data: { ccy: string; base_ccy: string; sale: string }[]) => {
+        const r = { ...DEFAULT_RATES };
+        (data ?? []).forEach(d => {
+          if (d.base_ccy === "UAH" && d.ccy in r) r[d.ccy] = parseFloat(d.sale);
+        });
+        setPbRates(r);
+      })
+      .catch(() => {});
+  }, []);
+
+  const fromAccount = useMemo(() => accounts.find(a => a.id === accountId), [accounts, accountId]);
+  const toAccount   = useMemo(() => accounts.find(a => a.id === toAccountId), [accounts, toAccountId]);
+  const accCurrency = fromAccount?.currency ?? "UAH";
+  const toCurrency  = toAccount?.currency ?? "UAH";
+
+  // Автоматично встановлюємо валюту при зміні рахунку (тільки нова транзакція)
+  useEffect(() => {
+    if (editTx) return;
+    const acc = accounts.find(a => a.id === accountId);
+    if (acc) setCurrency(acc.currency);
+  }, [accountId]); // eslint-disable-line
+
+  // Автоматично встановлюємо курс при зміні валюти
+  useEffect(() => {
+    setExchangeRate(currency === "UAH" ? 1 : (pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1));
+  }, [currency, pbRates]);
+
+  // Автоматично вибираємо "на рахунок" при переключенні на переказ
+  useEffect(() => {
+    if (type === "transfer" && !toAccountId) {
+      const other = accounts.find(a => a.id !== accountId);
+      if (other) setToAccountId(other.id);
+    }
+  }, [type]); // eslint-disable-line
+
   const cats = type === "expense" ? CATEGORIES.expense : CATEGORIES.income;
+
+  // Показувати поле курсу якщо валюта ≠ UAH або переказ між різними валютами
+  const showRate = currency !== "UAH" || (type === "transfer" && toCurrency !== accCurrency);
+
+  // Для переказу між різними валютами — розраховуємо суму отримання
+  const receivedAmount = useMemo(() => {
+    if (type !== "transfer" || !amount || toCurrency === currency) return null;
+    const uah = +amount * exchangeRate;
+    if (toCurrency === "UAH") return { amount: uah, currency: "UAH" };
+    const toRate = pbRates[toCurrency] ?? DEFAULT_RATES[toCurrency] ?? 1;
+    return { amount: uah / toRate, currency: toCurrency };
+  }, [type, amount, currency, toCurrency, exchangeRate, pbRates]);
 
   function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -88,17 +146,21 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
     if (!amount || isNaN(+amount) || +amount <= 0) { setError("Введіть суму"); return; }
     if (type !== "transfer" && !category)           { setError("Оберіть категорію"); return; }
     if (!accountId)                                 { setError("Оберіть рахунок"); return; }
+    if (type === "transfer" && !toAccountId)        { setError("Оберіть рахунок отримувача"); return; }
+    if (type === "transfer" && toAccountId === accountId) { setError("Рахунки мають різнятись"); return; }
     setSaving(true);
     try {
       await onSave({
         type,
         amount: +amount,
         currency,
+        exchange_rate: exchangeRate,
+        to_account_id: type === "transfer" ? toAccountId : null,
         category_key: type === "transfer" ? "transfer" : category,
-        account_id:   accountId || null, // null тільки якщо рахунків нема взагалі
+        account_id: accountId || null,
         transaction_date: date,
         note,
-        receipt_url:  photo,
+        receipt_url: photo,
         is_recurring: repeat,
         recurring_interval: repeat ? repeatPeriod : null,
       });
@@ -166,6 +228,35 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
                 {CURRENCIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
+
+            {/* Курс обміну */}
+            {showRate && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-neutral-400 shrink-0">
+                  1 {currency} =
+                </span>
+                <input
+                  type="number" value={exchangeRate}
+                  onChange={e => setExchangeRate(+e.target.value)}
+                  step="0.01" min="0"
+                  className="w-24 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all"
+                />
+                <span className="text-xs text-neutral-400">UAH</span>
+                {amount && +amount > 0 && (
+                  <span className="text-xs text-neutral-400 ml-1">
+                    ≈ {fmt(+amount * exchangeRate, "UAH", 0)}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Інфо для переказу з обміном */}
+            {receivedAmount && (
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/20 text-xs text-blue-600 dark:text-blue-400">
+                <span>Отримає:</span>
+                <span className="font-bold">{fmt(receivedAmount.amount, receivedAmount.currency)}</span>
+              </div>
+            )}
           </div>
 
           {/* Категорія */}
@@ -190,28 +281,44 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
             </div>
           )}
 
-          {/* Рахунок — обов'язковий */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-              Рахунок <span className="text-red-400">*</span>
-            </label>
-            {accounts.length === 0 ? (
-              <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
-                <span className="text-amber-500 text-lg shrink-0">⚠️</span>
-                <div>
-                  <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">Немає рахунків</p>
-                  <a href="/accounts" className="text-xs text-amber-600 dark:text-amber-500 underline underline-offset-2">
-                    Додати рахунок →
-                  </a>
+          {/* Рахунки */}
+          <div className={`grid gap-3 ${type === "transfer" ? "grid-cols-2" : "grid-cols-1"}`}>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                {type === "transfer" ? "З рахунку *" : "Рахунок *"}
+              </label>
+              {accounts.length === 0 ? (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
+                  <span className="text-amber-500 text-lg shrink-0">⚠️</span>
+                  <div>
+                    <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">Немає рахунків</p>
+                    <a href="/accounts" className="text-xs text-amber-600 dark:text-amber-500 underline underline-offset-2">Додати рахунок →</a>
+                  </div>
                 </div>
+              ) : (
+                <select value={accountId} onChange={e => setAccountId(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.icon ? `${a.icon} ` : ""}{a.name} ({a.currency})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {type === "transfer" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">На рахунок *</label>
+                <select value={toAccountId} onChange={e => setToAccountId(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
+                  {accounts.filter(a => a.id !== accountId).map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.icon ? `${a.icon} ` : ""}{a.name} ({a.currency})
+                    </option>
+                  ))}
+                </select>
               </div>
-            ) : (
-              <select value={accountId} onChange={e => setAccountId(e.target.value)}
-                className={`w-full px-3 py-2.5 rounded-xl border bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all ${
-                  !accountId ? "border-red-300 dark:border-red-700" : "border-neutral-200 dark:border-neutral-700"
-                }`}>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.icon ? `${a.icon} ` : ""}{a.name}</option>)}
-              </select>
             )}
           </div>
 
@@ -245,9 +352,7 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
             ) : (
               <button onClick={() => fileRef.current?.click()}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-400 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-400 transition-all text-sm">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+                <Icon d={icons.plus} className="w-4 h-4" />
                 Додати фото чеку
               </button>
             )}
@@ -255,31 +360,33 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
           </div>
 
           {/* Повторювана */}
-          <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">
-                  Повторювана <span className="text-neutral-400 font-normal text-xs">(опційно)</span>
-                </p>
-                <p className="text-xs text-neutral-400 mt-0.5">Автоматично додавати щомісяця або щотижня</p>
+          {type !== "transfer" && (
+            <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">
+                    Повторювана <span className="text-neutral-400 font-normal text-xs">(опційно)</span>
+                  </p>
+                  <p className="text-xs text-neutral-400 mt-0.5">Автоматично додавати щомісяця або щотижня</p>
+                </div>
+                <Toggle checked={repeat} onChange={setRepeat} />
               </div>
-              <Toggle checked={repeat} onChange={setRepeat} />
+              {repeat && (
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-700">
+                  {(["monthly", "weekly"] as const).map(p => (
+                    <button key={p} onClick={() => setRepeatPeriod(p)}
+                      className={`py-2 rounded-lg text-sm font-medium transition-all ${
+                        repeatPeriod === p
+                          ? "bg-orange-100 dark:bg-orange-950/30 text-orange-500"
+                          : "bg-white dark:bg-neutral-800 text-neutral-500 border border-neutral-200 dark:border-neutral-700"
+                      }`}>
+                      {p === "monthly" ? "Щомісяця" : "Щотижня"}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            {repeat && (
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-700">
-                {(["monthly", "weekly"] as const).map(p => (
-                  <button key={p} onClick={() => setRepeatPeriod(p)}
-                    className={`py-2 rounded-lg text-sm font-medium transition-all ${
-                      repeatPeriod === p
-                        ? "bg-orange-100 dark:bg-orange-950/30 text-orange-500"
-                        : "bg-white dark:bg-neutral-800 text-neutral-500 border border-neutral-200 dark:border-neutral-700"
-                    }`}>
-                    {p === "monthly" ? "Щомісяця" : "Щотижня"}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
 
           {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
 
@@ -301,10 +408,16 @@ function TxRow({ tx, accounts, onEdit, onDelete }: {
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const cat         = getCat(tx.type, tx.category_key);
-  const isExpense   = tx.type === "expense";
-  const isTransfer  = tx.type === "transfer";
-  const accountName = accounts.find(a => a.id === tx.account_id)?.name ?? "";
+  const cat        = getCat(tx.type, tx.category_key);
+  const isExpense  = tx.type === "expense";
+  const isTransfer = tx.type === "transfer";
+
+  const fromAccount = accounts.find(a => a.id === tx.account_id);
+  const toAccount   = accounts.find(a => a.id === tx.to_account_id);
+
+  const accountLabel = isTransfer && toAccount
+    ? `${fromAccount?.name ?? "?"} → ${toAccount.name}`
+    : fromAccount?.name ?? "";
 
   const iconBg = isTransfer
     ? "bg-blue-50 dark:bg-blue-950/30"
@@ -313,6 +426,13 @@ function TxRow({ tx, accounts, onEdit, onDelete }: {
     : "bg-green-50 dark:bg-green-950/20";
 
   const amountColor = isTransfer ? "text-blue-500" : isExpense ? "text-red-500" : "text-green-500";
+
+  // Показуємо суму в рідній валюті + UAH еквівалент якщо різна
+  const amountStr = isExpense ? "−" : isTransfer ? "" : "+";
+  const mainAmt   = `${amountStr}${fmt(tx.amount, tx.currency)}`;
+  const uahHint   = tx.currency !== "UAH" && tx.exchange_rate > 0
+    ? `≈ ${fmt(tx.amount * tx.exchange_rate, "UAH", 0)}`
+    : null;
 
   return (
     <div className="group flex items-center gap-3 px-4 py-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors">
@@ -331,14 +451,15 @@ function TxRow({ tx, accounts, onEdit, onDelete }: {
           )}
           {tx.receipt_url && <span className="text-xs shrink-0" title="Є фото чеку">📎</span>}
         </div>
-        <p className="text-xs text-neutral-400 mt-0.5">
-          {accountName ? `${accountName} · ` : ""}{cat.label}
+        <p className="text-xs text-neutral-400 mt-0.5 truncate">
+          {accountLabel}{accountLabel && cat.label ? " · " : ""}{isTransfer ? "" : cat.label}
         </p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <p className={`text-sm font-bold tabular-nums ${amountColor}`}>
-          {isExpense ? "−" : isTransfer ? "" : "+"}{fmt(tx.amount, tx.currency)}
-        </p>
+        <div className="text-right">
+          <p className={`text-sm font-bold tabular-nums ${amountColor}`}>{mainAmt}</p>
+          {uahHint && <p className="text-[10px] text-neutral-400 tabular-nums">{uahHint}</p>}
+        </div>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button onClick={onEdit}
             className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-orange-400 flex items-center justify-center transition-colors">
@@ -376,7 +497,7 @@ export default function TransactionsPage() {
     const [{ data: txData }, { data: accsData }] = await Promise.all([
       supabase
         .from("transactions")
-        .select("id, type, amount, currency, category_key, account_id, transaction_date, note, receipt_url, is_recurring, recurring_interval")
+        .select("id, type, amount, currency, exchange_rate, to_account_id, category_key, account_id, transaction_date, note, receipt_url, is_recurring, recurring_interval")
         .eq("user_id", user.id)
         .is("deleted_at", null)
         .order("transaction_date", { ascending: false })
@@ -395,6 +516,8 @@ export default function TransactionsPage() {
       type:             row.type as TxType,
       amount:           Number(row.amount),
       currency:         row.currency ?? "UAH",
+      exchange_rate:    Number(row.exchange_rate ?? 1),
+      to_account_id:    row.to_account_id ?? null,
       category_key:     row.category_key ?? "other",
       account_id:       row.account_id ?? null,
       transaction_date: row.transaction_date ?? new Date().toISOString().slice(0, 10),
@@ -421,6 +544,8 @@ export default function TransactionsPage() {
           type:               data.type,
           amount:             data.amount,
           currency:           data.currency,
+          exchange_rate:      data.exchange_rate,
+          to_account_id:      data.to_account_id,
           category_key:       data.category_key,
           account_id:         data.account_id,
           transaction_date:   data.transaction_date,
@@ -442,6 +567,8 @@ export default function TransactionsPage() {
           type:               data.type,
           amount:             data.amount,
           currency:           data.currency,
+          exchange_rate:      data.exchange_rate,
+          to_account_id:      data.to_account_id,
           category_key:       data.category_key,
           account_id:         data.account_id,
           transaction_date:   data.transaction_date,
@@ -468,7 +595,6 @@ export default function TransactionsPage() {
     setTxs(prev => prev.filter(t => t.id !== id));
   }
 
-  // Фільтрація для списку (враховує тип)
   const filtered = txs.filter(tx => {
     if (filterType !== "all" && tx.type !== filterType) return false;
     if (filterAccount !== "all" && tx.account_id !== filterAccount) return false;
@@ -483,7 +609,7 @@ export default function TransactionsPage() {
     return true;
   });
 
-  // Для summary-блоків — без фільтра по типу
+  // Summary — все в гривневому еквіваленті
   const summaryBase = txs.filter(tx => {
     if (filterAccount !== "all" && tx.account_id !== filterAccount) return false;
     if (search) {
@@ -497,10 +623,12 @@ export default function TransactionsPage() {
     return true;
   });
 
-  const grouped      = groupByDate(filtered);
-  const totalIncome  = summaryBase.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExpense = summaryBase.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const totalIncome  = summaryBase.filter(t => t.type === "income").reduce((s, t) => s + toUAH(t), 0);
+  const totalExpense = summaryBase.filter(t => t.type === "expense").reduce((s, t) => s + toUAH(t), 0);
   const balance      = totalIncome - totalExpense;
+  const hasMultiCurrency = summaryBase.some(t => t.currency !== "UAH");
+
+  const grouped = groupByDate(filtered);
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -511,7 +639,6 @@ export default function TransactionsPage() {
   return (
     <div className="space-y-5 pb-8 max-w-4xl">
 
-      {/* Заголовок */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Транзакції</h1>
@@ -535,6 +662,11 @@ export default function TransactionsPage() {
           </div>
         ))}
       </div>
+      {hasMultiCurrency && (
+        <p className="text-[11px] text-neutral-400 -mt-3 px-1">
+          * суми конвертовані за збереженим курсом на момент транзакції
+        </p>
+      )}
 
       {/* Фільтри */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-4 space-y-3">
@@ -580,19 +712,25 @@ export default function TransactionsPage() {
       ) : (
         <div className="space-y-3">
           {grouped.map(([date, dayTxs]) => {
-            const dayTotal = dayTxs.reduce((sum, tx) =>
-              tx.type === "expense" ? sum - tx.amount
-              : tx.type === "income" ? sum + tx.amount
-              : sum, 0);
+            // Денний підсумок тільки для витрат/доходів, в гривневому еквіваленті
+            const hasFinancial = dayTxs.some(t => t.type !== "transfer");
+            const dayTotal = dayTxs.reduce((sum, tx) => {
+              if (tx.type === "expense") return sum - toUAH(tx);
+              if (tx.type === "income")  return sum + toUAH(tx);
+              return sum;
+            }, 0);
+
             return (
               <div key={date} className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-neutral-50 dark:border-neutral-800/50 bg-neutral-50/50 dark:bg-neutral-800/20">
                   <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
                     {dateLabel(date)}
                   </span>
-                  <span className={`text-xs font-bold tabular-nums ${dayTotal >= 0 ? "text-green-500" : "text-red-500"}`}>
-                    {dayTotal >= 0 ? "+" : "−"}{fmt(Math.abs(dayTotal))}
-                  </span>
+                  {hasFinancial && (
+                    <span className={`text-xs font-bold tabular-nums ${dayTotal >= 0 ? "text-green-500" : "text-red-500"}`}>
+                      {dayTotal >= 0 ? "+" : "−"}{fmt(Math.abs(dayTotal))}
+                    </span>
+                  )}
                 </div>
                 <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
                   {dayTxs.map(tx => (

@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Toggle } from "@/components/ui";
 import { TX_CATEGORIES } from "@/lib/category-registry";
+import { fmt } from "@/lib/format";
 
 type TxType = "expense" | "income" | "transfer";
 
 interface Account { id: string; name: string; currency: string; icon?: string; }
 
 const CURRENCIES = ["UAH", "USD", "EUR", "PLN"];
+const DEFAULT_RATES: Record<string, number> = { USD: 41, EUR: 44, PLN: 10 };
 
 interface Props {
   onClose: () => void;
@@ -25,9 +27,10 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
   const [type, setType]               = useState<TxType>("expense");
   const [amount, setAmount]           = useState("");
   const [currency, setCurrency]       = useState("UAH");
+  const [exchangeRate, setExchangeRate] = useState(1);
   const [category, setCategory]       = useState("");
   const [accountId, setAccountId]     = useState("");
-  const [accountToId, setAccountToId] = useState("");
+  const [toAccountId, setToAccountId] = useState("");
   const [date, setDate]               = useState(new Date().toISOString().slice(0, 10));
   const [note, setNote]               = useState("");
   const [repeat, setRepeat]           = useState(false);
@@ -35,8 +38,23 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
   const [photo, setPhoto]             = useState<string | null>(null);
   const [error, setError]             = useState("");
   const [saving, setSaving]           = useState(false);
+  const [pbRates, setPbRates]         = useState<Record<string, number>>(DEFAULT_RATES);
 
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Курси ПриватБанку (продаж)
+  useEffect(() => {
+    fetch("https://api.privatbank.ua/p24api/pubinfo?exchange&json")
+      .then(r => r.json())
+      .then((data: { ccy: string; base_ccy: string; sale: string }[]) => {
+        const r = { ...DEFAULT_RATES };
+        (data ?? []).forEach(d => {
+          if (d.base_ccy === "UAH" && d.ccy in r) r[d.ccy] = parseFloat(d.sale);
+        });
+        setPbRates(r);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function loadAccounts() {
@@ -52,12 +70,49 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
       setAccounts(accs);
       if (accs.length > 0) {
         setAccountId(accs[0].id);
-        setAccountToId(accs[1]?.id ?? accs[0].id);
+        setCurrency(accs[0].currency);
+        setToAccountId(accs[1]?.id ?? "");
       }
       setLoadingAccs(false);
     }
     loadAccounts();
-  }, []);
+  }, []); // eslint-disable-line
+
+  // Автовалюта при зміні рахунку
+  useEffect(() => {
+    const acc = accounts.find(a => a.id === accountId);
+    if (acc) setCurrency(acc.currency);
+  }, [accountId]); // eslint-disable-line
+
+  // Автокурс при зміні валюти
+  useEffect(() => {
+    setExchangeRate(currency === "UAH" ? 1 : (pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1));
+  }, [currency, pbRates]);
+
+  // Автовибір рахунку-отримувача при переключенні на переказ
+  useEffect(() => {
+    if (type === "transfer" && !toAccountId) {
+      const other = accounts.find(a => a.id !== accountId);
+      if (other) setToAccountId(other.id);
+    }
+  }, [type]); // eslint-disable-line
+
+  const fromAccount = useMemo(() => accounts.find(a => a.id === accountId), [accounts, accountId]);
+  const toAccount   = useMemo(() => accounts.find(a => a.id === toAccountId), [accounts, toAccountId]);
+  const accCurrency = fromAccount?.currency ?? "UAH";
+  const toCurrency  = toAccount?.currency ?? "UAH";
+
+  // Показувати поле курсу якщо валюта ≠ UAH або переказ між різними валютами
+  const showRate = currency !== "UAH" || (type === "transfer" && toCurrency !== accCurrency);
+
+  // Сума отримання при крос-валютному переказі
+  const receivedAmount = useMemo(() => {
+    if (type !== "transfer" || !amount || toCurrency === currency) return null;
+    const uah = +amount * exchangeRate;
+    if (toCurrency === "UAH") return { amount: uah, currency: "UAH" };
+    const toRate = pbRates[toCurrency] ?? DEFAULT_RATES[toCurrency] ?? 1;
+    return { amount: uah / toRate, currency: toCurrency };
+  }, [type, amount, currency, toCurrency, exchangeRate, pbRates]);
 
   const cats = type === "expense" ? TX_CATEGORIES.expense : TX_CATEGORIES.income;
 
@@ -73,6 +128,8 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
     if (!amount || isNaN(+amount) || +amount <= 0) { setError("Введіть суму"); return; }
     if (type !== "transfer" && !category)           { setError("Оберіть категорію"); return; }
     if (!accountId)                                 { setError("Оберіть рахунок"); return; }
+    if (type === "transfer" && !toAccountId)        { setError("Оберіть рахунок отримувача"); return; }
+    if (type === "transfer" && toAccountId === accountId) { setError("Рахунки мають різнятись"); return; }
     setSaving(true); setError("");
 
     try {
@@ -84,6 +141,8 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
         type,
         amount:             +amount,
         currency,
+        exchange_rate:      exchangeRate,
+        to_account_id:      type === "transfer" ? toAccountId : null,
         category_key:       type === "transfer" ? "transfer" : category,
         account_id:         accountId || null,
         transaction_date:   date,
@@ -158,6 +217,33 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
                 {CURRENCIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
+
+            {/* Курс обміну */}
+            {showRate && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-neutral-400 shrink-0">1 {currency} =</span>
+                <input
+                  type="number" value={exchangeRate}
+                  onChange={e => setExchangeRate(+e.target.value)}
+                  step="0.01" min="0"
+                  className="w-24 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all"
+                />
+                <span className="text-xs text-neutral-400">UAH</span>
+                {amount && +amount > 0 && (
+                  <span className="text-xs text-neutral-400 ml-1">
+                    ≈ {fmt(+amount * exchangeRate, "UAH", 0)}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Сума отримання при крос-валютному переказі */}
+            {receivedAmount && (
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/20 text-xs text-blue-600 dark:text-blue-400">
+                <span>Отримає:</span>
+                <span className="font-bold">{fmt(receivedAmount.amount, receivedAmount.currency)}</span>
+              </div>
+            )}
           </div>
 
           {/* Категорія */}
@@ -182,7 +268,7 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
             </div>
           )}
 
-          {/* Рахунок */}
+          {/* Рахунок(и) */}
           <div className={`grid gap-3 ${type === "transfer" ? "grid-cols-2" : "grid-cols-1"}`}>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
@@ -201,16 +287,24 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
               ) : (
                 <select value={accountId} onChange={e => setAccountId(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
-                  {accounts.map(a => <option key={a.id} value={a.id}>{a.icon ? `${a.icon} ` : ""}{a.name}</option>)}
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.icon ? `${a.icon} ` : ""}{a.name} ({a.currency})
+                    </option>
+                  ))}
                 </select>
               )}
             </div>
             {type === "transfer" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">На рахунок *</label>
-                <select value={accountToId} onChange={e => setAccountToId(e.target.value)}
+                <select value={toAccountId} onChange={e => setToAccountId(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
-                  {accounts.filter(a => a.id !== accountId).map(a => <option key={a.id} value={a.id}>{a.icon ? `${a.icon} ` : ""}{a.name}</option>)}
+                  {accounts.filter(a => a.id !== accountId).map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.icon ? `${a.icon} ` : ""}{a.name} ({a.currency})
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
