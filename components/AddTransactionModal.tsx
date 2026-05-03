@@ -84,10 +84,15 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
     if (acc) setCurrency(acc.currency);
   }, [accountId]); // eslint-disable-line
 
-  // Автокурс при зміні валюти
+  // Курс при зміні валюти
   useEffect(() => {
     setExchangeRate(currency === "UAH" ? 1 : (pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1));
-  }, [currency, pbRates]);
+  }, [currency]); // eslint-disable-line
+
+  // Курс при завантаженні ПриватБанку
+  useEffect(() => {
+    if (currency !== "UAH") setExchangeRate(pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1);
+  }, [pbRates]); // eslint-disable-line
 
   // Автовибір рахунку-отримувача при переключенні на переказ
   useEffect(() => {

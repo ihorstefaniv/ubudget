@@ -107,10 +107,16 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
     if (acc) setCurrency(acc.currency);
   }, [accountId]); // eslint-disable-line
 
-  // Автоматично встановлюємо курс при зміні валюти
+  // Курс при зміні валюти (і для нових, і для редагування)
   useEffect(() => {
     setExchangeRate(currency === "UAH" ? 1 : (pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1));
-  }, [currency, pbRates]);
+  }, [currency]); // eslint-disable-line
+
+  // Курс при завантаженні ПриватБанку — тільки нова транзакція (не перебивати збережений)
+  useEffect(() => {
+    if (editTx) return;
+    if (currency !== "UAH") setExchangeRate(pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1);
+  }, [pbRates]); // eslint-disable-line
 
   // Автоматично вибираємо "на рахунок" при переключенні на переказ
   useEffect(() => {
@@ -713,11 +719,12 @@ export default function TransactionsPage() {
         <div className="space-y-3">
           {grouped.map(([date, dayTxs]) => {
             // Денний підсумок тільки для витрат/доходів, в гривневому еквіваленті
-            const hasFinancial = dayTxs.some(t => t.type !== "transfer");
-            const dayTotal = dayTxs.reduce((sum, tx) => {
+            const financialTxs = dayTxs.filter(t => t.type !== "transfer");
+            const hasFinancial = financialTxs.length > 0;
+            const hasFx = financialTxs.some(t => t.currency !== "UAH");
+            const dayTotal = financialTxs.reduce((sum, tx) => {
               if (tx.type === "expense") return sum - toUAH(tx);
-              if (tx.type === "income")  return sum + toUAH(tx);
-              return sum;
+              return sum + toUAH(tx);
             }, 0);
 
             return (
@@ -728,6 +735,7 @@ export default function TransactionsPage() {
                   </span>
                   {hasFinancial && (
                     <span className={`text-xs font-bold tabular-nums ${dayTotal >= 0 ? "text-green-500" : "text-red-500"}`}>
+                      {hasFx && <span className="font-normal opacity-60 mr-0.5">≈</span>}
                       {dayTotal >= 0 ? "+" : "−"}{fmt(Math.abs(dayTotal))}
                     </span>
                   )}
