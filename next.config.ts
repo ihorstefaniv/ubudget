@@ -10,9 +10,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   env: {
-    // Baked in at build time — available via process.env on both server and client
-    NEXT_PUBLIC_BUILD_SHA:  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "dev",
-    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+    NEXT_PUBLIC_BUILD_SHA:     process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "dev",
+    NEXT_PUBLIC_BUILD_TIME:    new Date().toISOString(),
+    NEXT_PUBLIC_APP_VERSION:   process.env.npm_package_version ?? "0.1.0",
   },
   async headers() {
     return [
