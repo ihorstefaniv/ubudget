@@ -153,7 +153,7 @@ async function scrapeVseazs(): Promise<Record<FuelType, number|null> | null> {
 export async function GET(req: NextRequest) {
   // Перевірка Vercel Cron Secret
   const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (auth !== `Bearer ${process.env.CRON_SECRET?.trim()}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
