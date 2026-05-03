@@ -497,43 +497,47 @@ export default function TransactionsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setLoading(false); return; }
 
-    const [{ data: txData }, { data: accsData }] = await Promise.all([
-      supabase
-        .from("transactions")
-        .select("id, type, amount, currency, exchange_rate, to_account_id, category_key, account_id, transaction_date, note, receipt_url, is_recurring, recurring_interval")
-        .eq("user_id", user.id)
-        .is("deleted_at", null)
-        .order("transaction_date", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(500),
-      supabase
-        .from("accounts")
-        .select("id, name, currency, icon")
-        .eq("user_id", user.id)
-        .eq("is_archived", false)
-        .order("name"),
-    ]);
+      const [{ data: txData }, { data: accsData }] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("id, type, amount, currency, exchange_rate, to_account_id, category_key, account_id, transaction_date, note, receipt_url, is_recurring, recurring_interval")
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .order("transaction_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(500),
+        supabase
+          .from("accounts")
+          .select("id, name, currency, icon")
+          .eq("user_id", user.id)
+          .eq("is_archived", false)
+          .order("name"),
+      ]);
 
-    setTxs((txData ?? []).map(row => ({
-      id:               row.id,
-      type:             row.type as TxType,
-      amount:           Number(row.amount),
-      currency:         row.currency ?? "UAH",
-      exchange_rate:    Number(row.exchange_rate ?? 1),
-      to_account_id:    row.to_account_id ?? null,
-      category_key:     row.category_key ?? "other",
-      account_id:       row.account_id ?? null,
-      transaction_date: row.transaction_date ?? new Date().toISOString().slice(0, 10),
-      note:             row.note ?? "",
-      receipt_url:      row.receipt_url ?? null,
-      is_recurring:     row.is_recurring ?? false,
-      recurring_interval: (row.recurring_interval as "monthly" | "weekly" | null) ?? null,
-    })));
+      setTxs((txData ?? []).map(row => ({
+        id:               row.id,
+        type:             row.type as TxType,
+        amount:           Number(row.amount),
+        currency:         row.currency ?? "UAH",
+        exchange_rate:    Number(row.exchange_rate ?? 1),
+        to_account_id:    row.to_account_id ?? null,
+        category_key:     row.category_key ?? "other",
+        account_id:       row.account_id ?? null,
+        transaction_date: row.transaction_date ?? new Date().toISOString().slice(0, 10),
+        note:             row.note ?? "",
+        receipt_url:      row.receipt_url ?? null,
+        is_recurring:     row.is_recurring ?? false,
+        recurring_interval: (row.recurring_interval as "monthly" | "weekly" | null) ?? null,
+      })));
 
-    setAccounts(accsData ?? []);
+      setAccounts(accsData ?? []);
+    } catch {
+      // якщо запит впав — показуємо порожній список, а не вічний спінер
+    }
     setLoading(false);
   }, []);
 
