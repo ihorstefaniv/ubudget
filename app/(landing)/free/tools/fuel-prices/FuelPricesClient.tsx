@@ -189,65 +189,80 @@ function FuelStela({
 
 // ─── Trend Chart ─────────────────────────────────────────────
 function TrendChart({
-  data, fuel, stationName, regionName,
+  data, fuel,
 }: {
   data: TrendPoint[]; fuel: TrendFuel;
   stationName: string; regionName: string;
 }) {
   if (!data.length) return null;
   const values = data.map(d => d[fuel]);
-  const min = Math.min(...values) - 0.5;
-  const max = Math.max(...values) + 0.5;
-  const range = max - min || 1;
-  const H = 120; const W = 400;
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+  const pad = (maxVal - minVal) * 0.1 || 0.5;
+  const minY = minVal - pad;
+  const maxY = maxVal + pad;
+  const range = maxY - minY || 1;
+  const H = 100; const W = 400;
   const color = FUEL_COLORS[fuel] || "#f97316";
 
-  const pts = values.map((v,i) => {
-    const x = (i/(values.length-1))*W;
-    const y = H - ((v-min)/range)*H;
-    return {x, y, v};
-  });
+  const pts = values.map((v, i) => ({
+    x: (i / (values.length - 1)) * W,
+    y: H - ((v - minY) / range) * H,
+    v,
+  }));
   const polyline = pts.map(p => `${p.x},${p.y}`).join(" ");
   const area = `0,${H} ${polyline} ${W},${H}`;
 
-  const lastVal = values[values.length-1];
-  const firstVal = values[0];
-  const diff = lastVal - firstVal;
+  const lastVal = values[values.length - 1];
+  const diff = lastVal - values[0];
+
+  // % висоти для HTML-міток (0% = верх, 100% = низ)
+  const maxPct = ((maxY - maxVal) / range) * 100;
+  const minPct = ((maxY - minVal) / range) * 100;
 
   return (
     <div className="space-y-2">
+      {/* Заголовок — чистий HTML, не деформується */}
       <div className="flex items-center justify-between text-xs">
         <span className="text-neutral-400">{data[0]?.date}</span>
         <div className="flex items-center gap-3">
           <span className="font-bold text-neutral-900 dark:text-neutral-100">₴{lastVal.toFixed(2)}</span>
-          <span className={`font-medium ${diff>=0?"text-red-400":"text-green-500"}`}>
-            {diff>=0?"▲":"▼"} {Math.abs(diff).toFixed(2)} грн
+          <span className={`font-medium ${diff >= 0 ? "text-red-400" : "text-green-500"}`}>
+            {diff >= 0 ? "▲" : "▼"} {Math.abs(diff).toFixed(2)} грн
           </span>
         </div>
-        <span className="text-neutral-400">{data[data.length-1]?.date}</span>
+        <span className="text-neutral-400">{data[data.length - 1]?.date}</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{height:120}} preserveAspectRatio="none">
-        <defs>
-          <linearGradient id={`g-${fuel}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.25"/>
-            <stop offset="100%" stopColor={color} stopOpacity="0"/>
-          </linearGradient>
-        </defs>
-        <polygon points={area} fill={`url(#g-${fuel})`}/>
-        <polyline points={polyline} fill="none" stroke={color} strokeWidth="2"
-          strokeLinecap="round" strokeLinejoin="round"/>
-        {/* Last point dot */}
-        <circle cx={pts[pts.length-1]?.x} cy={pts[pts.length-1]?.y} r="3.5" fill={color}/>
-        {/* Min/max labels */}
-        <text x="2" y={H-((Math.max(...values)-min)/range)*H-3}
-          fontFamily="system-ui" fontSize="9" fill={color} opacity="0.8">
-          ₴{Math.max(...values).toFixed(1)}
-        </text>
-        <text x="2" y={H-((Math.min(...values)-min)/range)*H+10}
-          fontFamily="system-ui" fontSize="9" fill={color} opacity="0.8">
-          ₴{Math.min(...values).toFixed(1)}
-        </text>
-      </svg>
+
+      {/* SVG лише для ліній — без тексту, розтягування не страшне */}
+      <div className="relative">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{height: 100}} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id={`g-${fuel}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.2"/>
+              <stop offset="100%" stopColor={color} stopOpacity="0"/>
+            </linearGradient>
+          </defs>
+          <polygon points={area} fill={`url(#g-${fuel})`}/>
+          <polyline points={polyline} fill="none" stroke={color} strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r="3" fill={color}/>
+        </svg>
+
+        {/* Мін/макс як HTML — не розтягуються */}
+        <span
+          className="absolute left-2 text-[10px] font-semibold pointer-events-none"
+          style={{ color, top: `${maxPct}%`, transform: "translateY(-100%)" }}
+        >
+          ₴{maxVal.toFixed(2)}
+        </span>
+        <span
+          className="absolute left-2 text-[10px] font-semibold pointer-events-none"
+          style={{ color, top: `${minPct}%` }}
+        >
+          ₴{minVal.toFixed(2)}
+        </span>
+      </div>
     </div>
   );
 }

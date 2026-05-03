@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 
 // ─── Типи (копія з /api/fuel-prices/route.ts) ─────────────────
@@ -198,6 +199,11 @@ export async function GET(req: NextRequest) {
       { id: 1, data: payload, updated_at: new Date().toISOString() },
       { onConflict: "id" }
     );
+
+    // Скидаємо ISR-кеш щоб сторінка одразу побачила нові ціни
+    revalidatePath("/api/fuel-prices");
+    revalidatePath("/free/tools/fuel-prices");
+    revalidatePath("/tools/fuel-prices");
 
     return NextResponse.json({
       ok: true,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-export const revalidate = 86400;
+export const revalidate = 3600;
 
 export type FuelType = "A-95+" | "A-95" | "A-92" | "ДП" | "ДП+" | "Газ";
 
