@@ -229,10 +229,17 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
                 placeholder="0.00" autoFocus
                 className="flex-1 px-4 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-xl font-bold placeholder:text-neutral-300 focus:outline-none focus:border-orange-300 dark:focus:border-orange-700 transition-all"
               />
-              <select value={currency} onChange={e => setCurrency(e.target.value)}
-                className="px-3 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm font-medium focus:outline-none focus:border-orange-300 transition-all">
-                {CURRENCIES.map(c => <option key={c}>{c}</option>)}
-              </select>
+              {/* Якщо рахунок має власну валюту — блокуємо вибір, показуємо бейдж */}
+              {accCurrency !== "UAH" ? (
+                <div className="px-3 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-sm font-medium min-w-[60px] text-center">
+                  {accCurrency}
+                </div>
+              ) : (
+                <select value={currency} onChange={e => setCurrency(e.target.value)}
+                  className="px-3 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm font-medium focus:outline-none focus:border-orange-300 transition-all">
+                  {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                </select>
+              )}
             </div>
 
             {/* Курс обміну */}
