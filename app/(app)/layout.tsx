@@ -18,7 +18,7 @@ import { Icon, icons } from "@/components/ui";
 import { FeaturesProvider } from "@/lib/features-context";
 
 /** Версія білду — оновлюй при кожному релізі */
-const APP_VERSION = "v1.2.0";
+const APP_VERSION = "v1.2 · 3730924";
 
 // ─── Theme Toggle ─────────────────────────────────────────────
 
