@@ -26,7 +26,7 @@ interface Transaction {
   recurring_interval?: "monthly" | "weekly" | null;
 }
 
-interface Account { id: string; name: string; currency: string; icon?: string; }
+interface Account { id: string; name: string; currency: string; icon?: string; is_archived?: boolean; }
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -519,9 +519,8 @@ export default function TransactionsPage() {
           .limit(500),
         supabase
           .from("accounts")
-          .select("id, name, currency, icon")
+          .select("id, name, currency, icon, is_archived")
           .eq("user_id", user.id)
-          .eq("is_archived", false)
           .order("name"),
       ]);
 
@@ -550,6 +549,38 @@ export default function TransactionsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Оновлює баланс рахунку на delta (в нативній валюті рахунку)
+  async function shiftBalance(accountId: string, delta: number) {
+    const { data } = await supabase.from("accounts").select("balance").eq("id", accountId).single();
+    if (!data) return;
+    await supabase.from("accounts").update({ balance: Number(data.balance) + delta }).eq("id", accountId);
+  }
+
+  // Розраховує суму яку отримує to_account при переказі
+  function calcToAmount(tx: Omit<Transaction, "id">, fromCurrency: string, toCurrency: string): number {
+    if (fromCurrency === toCurrency) return tx.amount;
+    if (toCurrency === "UAH") return tx.amount * tx.exchange_rate;
+    if (fromCurrency === "UAH") return tx.amount / tx.exchange_rate;
+    // обидві іноземні — через UAH
+    return tx.amount;
+  }
+
+  // Застосовує ефект транзакції на баланси (sign=+1 додати, sign=-1 відкотити)
+  async function applyToBalances(tx: Omit<Transaction, "id">, sign: 1 | -1) {
+    const fromAcc = accounts.find(a => a.id === tx.account_id);
+    const toAcc   = accounts.find(a => a.id === tx.to_account_id);
+    if (!fromAcc) return;
+
+    if (tx.type === "income") {
+      await shiftBalance(fromAcc.id, sign * tx.amount);
+    } else if (tx.type === "expense") {
+      await shiftBalance(fromAcc.id, -sign * tx.amount);
+    } else if (tx.type === "transfer" && toAcc) {
+      await shiftBalance(fromAcc.id, -sign * tx.amount);
+      await shiftBalance(toAcc.id, sign * calcToAmount(tx, fromAcc.currency, toAcc.currency));
+    }
+  }
+
   async function handleSave(data: Omit<Transaction, "id">) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
@@ -575,6 +606,9 @@ export default function TransactionsPage() {
         .eq("id", editTx.id)
         .eq("user_id", user.id);
       if (error) throw error;
+      // Відкочуємо старий ефект і застосовуємо новий
+      await applyToBalances(editTx, -1);
+      await applyToBalances(data, +1);
       setTxs(prev => prev.map(t => t.id === editTx.id ? { id: editTx.id, ...data } : t));
     } else {
       const { data: inserted, error } = await supabase
@@ -597,6 +631,7 @@ export default function TransactionsPage() {
         .select("id")
         .single();
       if (error) throw error;
+      await applyToBalances(data, +1);
       setTxs(prev => [{ id: inserted.id, ...data }, ...prev]);
     }
   }
@@ -604,11 +639,14 @@ export default function TransactionsPage() {
   async function deleteTx(id: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    const tx = txs.find(t => t.id === id);
     await supabase
       .from("transactions")
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", id)
       .eq("user_id", user.id);
+    // Відкочуємо ефект видаленої транзакції
+    if (tx) await applyToBalances(tx, -1);
     setTxs(prev => prev.filter(t => t.id !== id));
   }
 
@@ -712,7 +750,7 @@ export default function TransactionsPage() {
             <select value={filterAccount} onChange={e => setFilterAccount(e.target.value)}
               className="px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 focus:outline-none focus:border-orange-300 transition-all">
               <option value="all">Всі рахунки</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {accounts.filter(a => !a.is_archived).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           )}
         </div>
@@ -770,7 +808,7 @@ export default function TransactionsPage() {
           onClose={() => { setShowModal(false); setEditTx(undefined); }}
           onSave={handleSave}
           editTx={editTx}
-          accounts={accounts}
+          accounts={accounts.filter(a => !a.is_archived)}
         />
       )}
     </div>
