@@ -13,10 +13,12 @@ export async function signUp({
   email,
   password,
   fullName,
+  modules = ["budget"],
 }: {
   email: string;
   password: string;
   fullName: string;
+  modules?: string[];
 }) {
   const supabase = createClient();
 
@@ -30,20 +32,22 @@ export async function signUp({
 
   if (error) return { error: error.message };
 
-  // Після реєстрації — створюємо профіль і дефолтні модулі
   if (data.user) {
-    await supabase.from("profiles").insert({
+    const allModuleKeys = ["budget", "credits", "investments", "envelopes", "household"];
+    const modulesMap = Object.fromEntries(
+      allModuleKeys.map((key) => [key, modules.includes(key)])
+    );
+    // budget завжди увімкнений
+    modulesMap["budget"] = true;
+
+    // upsert щоб не конфліктувати з можливим тригером на auth.users
+    const { error: profileError } = await supabase.from("profiles").upsert({
       id: data.user.id,
       full_name: fullName,
       base_currency: "UAH",
+      modules: modulesMap,
     });
-
-    // Включаємо базовий модуль за замовчуванням
-    await supabase.from("user_modules").insert({
-      user_id: data.user.id,
-      module_name: "budget",
-      is_enabled: true,
-    });
+    if (profileError) return { error: profileError.message };
   }
 
   return { data };

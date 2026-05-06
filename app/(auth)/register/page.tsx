@@ -14,10 +14,11 @@ function IconCheck() {
 }
 
 const MODULES = [
-  { id: "budget", label: "Особистий бюджет", desc: "Доходи, витрати, категорії", default: true },
-  { id: "household", label: "Сімейний бюджет", desc: "Спільний бюджет з родиною" },
-  { id: "collections", label: "Колекції", desc: "Нумізматика, антикваріат, мистецтво" },
-  { id: "crypto", label: "Крипто & Метали", desc: "Bitcoin, золото, срібло" },
+  { id: "budget",      label: "Бюджет",             desc: "Планування доходів та витрат по категоріях", default: true },
+  { id: "credits",     label: "Кредити & Депозити", desc: "Кредити, розстрочки, депозити" },
+  { id: "investments", label: "Інвестиції",          desc: "Акції, облігації, ETF" },
+  { id: "envelopes",   label: "Конверти",            desc: "Метод конвертів для розподілу бюджету" },
+  { id: "household",   label: "Сімейний бюджет",    desc: "Спільний бюджет з родиною" },
 ];
 
 function validatePassword(pwd: string): string | null {
@@ -48,7 +49,7 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
 
-    const result = await signUp({ email, password, fullName });
+    const result = await signUp({ email, password, fullName, modules: selectedModules });
 
     if (result.error) {
       setError(result.error);
