@@ -5,13 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Toggle } from "@/components/ui";
 import { TX_CATEGORIES } from "@/lib/category-registry";
 import { fmt } from "@/lib/format";
+import { fetchNbuRates, rateFor, FALLBACK_RATES as NBU_FALLBACK } from "@/lib/nbu-rates";
 
 type TxType = "expense" | "income" | "transfer";
 
 interface Account { id: string; name: string; currency: string; icon?: string; }
 
 const CURRENCIES = ["UAH", "USD", "EUR", "PLN"];
-const DEFAULT_RATES: Record<string, number> = { USD: 41, EUR: 44, PLN: 10 };
+const DEFAULT_RATES: Record<string, number> = NBU_FALLBACK;
 
 interface Props {
   onClose: () => void;
@@ -39,21 +40,13 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
   const [error, setError]             = useState("");
   const [saving, setSaving]           = useState(false);
   const [pbRates, setPbRates]         = useState<Record<string, number>>(DEFAULT_RATES);
+  const [nbuLoaded, setNbuLoaded]     = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Курси ПриватБанку (продаж)
+  // Курси НБУ
   useEffect(() => {
-    fetch("https://api.privatbank.ua/p24api/pubinfo?exchange&json")
-      .then(r => r.json())
-      .then((data: { ccy: string; base_ccy: string; sale: string }[]) => {
-        const r = { ...DEFAULT_RATES };
-        (data ?? []).forEach(d => {
-          if (d.base_ccy === "UAH" && d.ccy in r) r[d.ccy] = parseFloat(d.sale);
-        });
-        setPbRates(r);
-      })
-      .catch(() => {});
+    fetchNbuRates().then(r => { setPbRates(r); setNbuLoaded(true); }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -86,12 +79,12 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
 
   // Курс при зміні валюти
   useEffect(() => {
-    setExchangeRate(currency === "UAH" ? 1 : (pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1));
+    setExchangeRate(rateFor(pbRates,currency));
   }, [currency]); // eslint-disable-line
 
-  // Курс при завантаженні ПриватБанку
+  // Курс при завантаженні НБУ
   useEffect(() => {
-    if (currency !== "UAH") setExchangeRate(pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1);
+    if (currency !== "UAH") setExchangeRate(rateFor(pbRates,currency));
   }, [pbRates]); // eslint-disable-line
 
   // Автовибір рахунку-отримувача при переключенні на переказ
@@ -115,7 +108,7 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
     if (type !== "transfer" || !amount || toCurrency === currency) return null;
     const uah = +amount * exchangeRate;
     if (toCurrency === "UAH") return { amount: uah, currency: "UAH" };
-    const toRate = pbRates[toCurrency] ?? DEFAULT_RATES[toCurrency] ?? 1;
+    const toRate = rateFor(pbRates,toCurrency);
     return { amount: uah / toRate, currency: toCurrency };
   }, [type, amount, currency, toCurrency, exchangeRate, pbRates]);
 
@@ -245,6 +238,9 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
                     ≈ {fmt(+amount * exchangeRate, "UAH", 0)}
                   </span>
                 )}
+                <span className="text-[10px] text-neutral-300 dark:text-neutral-600 ml-auto shrink-0">
+                  {nbuLoaded ? "курс НБУ" : "НБУ…"}
+                </span>
               </div>
             )}
 

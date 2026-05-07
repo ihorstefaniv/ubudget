@@ -7,26 +7,8 @@ import { Icon, icons, Input, Select, Modal, Button, ToggleRow } from "@/componen
 import { fmt } from "@/lib/format";
 
 // ─── Currency helpers ─────────────────────────────────────────
-interface Rates { USD: number; EUR: number; PLN: number; }
-const FALLBACK_RATES: Rates = { USD: 41.5, EUR: 44.8, PLN: 10.2 };
-
-async function fetchNbuRates(): Promise<Rates> {
-  try {
-    const [usdRes, eurRes, plnRes] = await Promise.all([
-      fetch("https://bank.gov.ua/NBU_Exchange/exchange?valcode=USD&json"),
-      fetch("https://bank.gov.ua/NBU_Exchange/exchange?valcode=EUR&json"),
-      fetch("https://bank.gov.ua/NBU_Exchange/exchange?valcode=PLN&json"),
-    ]);
-    const [usd, eur, pln] = await Promise.all([usdRes.json(), eurRes.json(), plnRes.json()]);
-    return {
-      USD: usd[0]?.rate ?? FALLBACK_RATES.USD,
-      EUR: eur[0]?.rate ?? FALLBACK_RATES.EUR,
-      PLN: pln[0]?.rate ?? FALLBACK_RATES.PLN,
-    };
-  } catch {
-    return FALLBACK_RATES;
-  }
-}
+import { fetchNbuRates, FALLBACK_RATES } from "@/lib/nbu-rates";
+type Rates = typeof FALLBACK_RATES;
 
 function makeToUAH(rates: Rates) {
   return (n: number, cur: string) =>

@@ -49,7 +49,8 @@ function groupByDate(txs: Transaction[]) {
 
 function getCat(type: TxType, key: string) { return getTxCategory(type, key); }
 
-const DEFAULT_RATES: Record<string, number> = { USD: 41, EUR: 44, PLN: 10 };
+import { fetchNbuRates, rateFor, FALLBACK_RATES as NBU_FALLBACK } from "@/lib/nbu-rates";
+const DEFAULT_RATES: Record<string, number> = NBU_FALLBACK;
 
 // ─── Add/Edit Modal ───────────────────────────────────────────
 
@@ -78,21 +79,13 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
   const [error, setError]         = useState("");
   const [saving, setSaving]       = useState(false);
   const [pbRates, setPbRates]     = useState<Record<string, number>>(DEFAULT_RATES);
+  const [nbuLoaded, setNbuLoaded] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Курси ПриватБанку (продаж)
+  // Курси НБУ
   useEffect(() => {
-    fetch("https://api.privatbank.ua/p24api/pubinfo?exchange&json")
-      .then(r => r.json())
-      .then((data: { ccy: string; base_ccy: string; sale: string }[]) => {
-        const r = { ...DEFAULT_RATES };
-        (data ?? []).forEach(d => {
-          if (d.base_ccy === "UAH" && d.ccy in r) r[d.ccy] = parseFloat(d.sale);
-        });
-        setPbRates(r);
-      })
-      .catch(() => {});
+    fetchNbuRates().then(r => { setPbRates(r); setNbuLoaded(true); }).catch(() => {});
   }, []);
 
   const fromAccount = useMemo(() => accounts.find(a => a.id === accountId), [accounts, accountId]);
@@ -109,13 +102,13 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
 
   // Курс при зміні валюти (і для нових, і для редагування)
   useEffect(() => {
-    setExchangeRate(currency === "UAH" ? 1 : (pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1));
+    setExchangeRate(rateFor(pbRates,currency));
   }, [currency]); // eslint-disable-line
 
   // Курс при завантаженні ПриватБанку — тільки нова транзакція (не перебивати збережений)
   useEffect(() => {
     if (editTx) return;
-    if (currency !== "UAH") setExchangeRate(pbRates[currency] ?? DEFAULT_RATES[currency] ?? 1);
+    if (currency !== "UAH") setExchangeRate(rateFor(pbRates,currency));
   }, [pbRates]); // eslint-disable-line
 
   // Автоматично вибираємо "на рахунок" при переключенні на переказ
@@ -136,7 +129,7 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
     if (type !== "transfer" || !amount || toCurrency === currency) return null;
     const uah = +amount * exchangeRate;
     if (toCurrency === "UAH") return { amount: uah, currency: "UAH" };
-    const toRate = pbRates[toCurrency] ?? DEFAULT_RATES[toCurrency] ?? 1;
+    const toRate = rateFor(pbRates,toCurrency);
     return { amount: uah / toRate, currency: toCurrency };
   }, [type, amount, currency, toCurrency, exchangeRate, pbRates]);
 
@@ -260,6 +253,9 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
                     ≈ {fmt(+amount * exchangeRate, "UAH", 0)}
                   </span>
                 )}
+                <span className="text-[10px] text-neutral-300 dark:text-neutral-600 ml-auto shrink-0">
+                  {nbuLoaded ? "курс НБУ" : "НБУ…"}
+                </span>
               </div>
             )}
 
