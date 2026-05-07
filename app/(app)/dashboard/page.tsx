@@ -9,7 +9,7 @@ import { getCategoryDef } from "@/lib/category-registry";
 type Period = "month" | "quarter" | "year";
 
 interface Account { id: string; name: string; type: string; balance: number; currency: string; icon?: string; }
-interface Transaction { id: string; type: string; amount: number; note: string | null; transaction_date: string; category_key: string | null; }
+interface Transaction { id: string; type: string; amount: number; currency: string; exchange_rate: number; note: string | null; transaction_date: string; category_key: string | null; }
 interface Credit { id: string; remaining_amount: number; monthly_payment: number; payment_day: number | null; }
 interface Deposit { id: string; amount: number; currency: string; }
 interface Stock { id: string; quantity: number; current_price: number; currency: string; }
@@ -111,9 +111,10 @@ export default function DashboardPage() {
       { data: stks }, { data: bnd }, { data: re }, { data: bi }, { data: col },
     ] = await Promise.all([
       supabase.from("accounts").select("id,name,type,balance,currency,icon").eq("user_id", user.id).eq("is_archived", false).order("balance", { ascending: false }),
-      supabase.from("transactions").select("id,type,amount,note,transaction_date,category_key")
+      supabase.from("transactions").select("id,type,amount,currency,exchange_rate,note,transaction_date,category_key")
         .eq("user_id", user.id).is("deleted_at", null)
-        .order("transaction_date", { ascending: false }).order("created_at", { ascending: false }).limit(200),
+        .gte("transaction_date", new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10))
+        .order("transaction_date", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("credits").select("id,remaining_amount,monthly_payment,payment_day").eq("user_id", user.id).eq("is_archived", false),
       supabase.from("deposits").select("id,amount,currency").eq("user_id", user.id).eq("is_archived", false),
       supabase.from("budgets").select("plan_amount").eq("user_id", user.id).eq("month", m).eq("year", y),
@@ -125,7 +126,11 @@ export default function DashboardPage() {
     ]);
 
     setAccounts(accs ?? []);
-    setTxs(txData ?? []);
+    setTxs((txData ?? []).map(t => ({
+      ...t,
+      currency: t.currency ?? "UAH",
+      exchange_rate: Number(t.exchange_rate ?? 1),
+    })));
     setCredits(cr ?? []);
     setDeposits(dep ?? []);
     setBudgetPlan((budgets ?? []).reduce((s, b) => s + Number(b.plan_amount), 0));
@@ -161,14 +166,17 @@ export default function DashboardPage() {
     totalInvestments -
     totalDebt;
 
+  const txToUAH = (t: Transaction) =>
+    t.currency === "UAH" ? Number(t.amount) : Number(t.amount) * (Number(t.exchange_rate) || 1);
+
   const periodStart = startOf(period);
   const periodTxs   = txs.filter(t => t.transaction_date >= periodStart);
-  const income      = periodTxs.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
-  const expenses    = periodTxs.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+  const income      = periodTxs.filter(t => t.type === "income").reduce((s, t) => s + txToUAH(t), 0);
+  const expenses    = periodTxs.filter(t => t.type === "expense").reduce((s, t) => s + txToUAH(t), 0);
 
   const monthStart = startOf("month");
   const monthTxs   = txs.filter(t => t.transaction_date >= monthStart && t.type === "expense");
-  const budgetFact = monthTxs.reduce((s, t) => s + Number(t.amount), 0);
+  const budgetFact = monthTxs.reduce((s, t) => s + txToUAH(t), 0);
 
   const catTotals: Record<string, number> = {};
   monthTxs.forEach(t => { const k = t.category_key ?? "other"; catTotals[k] = (catTotals[k] ?? 0) + Number(t.amount); });
