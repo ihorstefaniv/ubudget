@@ -510,16 +510,18 @@ export default function TasksPage() {
           <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {STATUSES.filter(s => filterDone || s.key !== "done").map(s => (
-            <KanbanColumn
-              key={s.key}
-              status={s}
-              tasks={byStatus(s.key)}
-              onOpen={setModal}
-              onStatusChange={handleStatusChange}
-            />
-          ))}
+        <div className="overflow-x-auto -mx-5 lg:-mx-8 px-5 lg:px-8">
+          <div className="flex gap-4 pb-4 min-w-max">
+            {STATUSES.filter(s => filterDone || s.key !== "done").map(s => (
+              <KanbanColumn
+                key={s.key}
+                status={s}
+                tasks={byStatus(s.key)}
+                onOpen={setModal}
+                onStatusChange={handleStatusChange}
+              />
+            ))}
+          </div>
         </div>
       )}
 
