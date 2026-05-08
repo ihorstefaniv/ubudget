@@ -27,6 +27,9 @@ interface Account {
   currency: string;
   icon?: string | null;
   is_archived: boolean;
+  credit_limit?: number | null;
+  interest_rate?: number | null;
+  payment_day?: number | null;
 }
 
 interface Credit {
@@ -251,17 +254,21 @@ function CashModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
 
 function BankingModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const supabase = createClient();
-  const [type, setType]           = useState("debit");
-  const [bank, setBank]           = useState("");
-  const [accName, setAccName]     = useState("");
-  const [currency, setCurrency]   = useState("UAH");
-  const [balance, setBalance]     = useState("");
-  const [hasService, setHasService] = useState(false);
-  const [saving, setSaving]       = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [type, setType]               = useState("debit");
+  const [bank, setBank]               = useState("");
+  const [accName, setAccName]         = useState("");
+  const [currency, setCurrency]       = useState("UAH");
+  const [balance, setBalance]         = useState("");
+  const [creditLimit, setCreditLimit] = useState("");
+  const [interestRate, setInterestRate] = useState("");
+  const [paymentDay, setPaymentDay]   = useState("");
+  const [currentDebt, setCurrentDebt] = useState("");
+  const [saving, setSaving]           = useState(false);
+  const [submitted, setSubmitted]     = useState(false);
 
-  const bankErr   = submitted && !bank.trim();
-  const accErr    = submitted && !accName.trim();
+  const isCreditCard = type === "credit";
+  const bankErr = submitted && !bank.trim();
+  const accErr  = submitted && !accName.trim();
 
   async function handleSave() {
     setSubmitted(true);
@@ -274,9 +281,14 @@ function BankingModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
       user_id: user.id,
       name: bank.trim() ? `${bank.trim()} · ${name}` : name,
       type: "banking",
-      balance: parseFloat(balance) || 0,
+      balance: isCreditCard ? -(parseFloat(currentDebt) || 0) : parseFloat(balance) || 0,
       currency,
-      icon: type === "credit" ? "🔴" : "💳",
+      icon: isCreditCard ? "🔴" : "💳",
+      ...(isCreditCard && {
+        credit_limit:  parseFloat(creditLimit) || null,
+        interest_rate: parseFloat(interestRate) || null,
+        payment_day:   parseInt(paymentDay) || null,
+      }),
     });
     setSaving(false);
     onSaved();
@@ -297,17 +309,24 @@ function BankingModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
       <Input label="Назва рахунку *" value={accName} onChange={e => setAccName(e.target.value)} placeholder="Моя картка"
         error={accErr ? "Вкажіть назву рахунку" : undefined} />
       <div className="grid grid-cols-2 gap-3">
-        <Input label="Баланс" type="number" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0.00" />
         <Select label="Валюта" value={currency} onChange={e => setCurrency(e.target.value)} options={CURRENCIES.slice(0, 3)} />
+        {!isCreditCard && (
+          <Input label="Баланс" type="number" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0.00" />
+        )}
       </div>
-      <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700 space-y-3">
-        <ToggleRow
-          label="Плата за обслуговування"
-          desc="Автоматично враховувати у витратах"
-          checked={hasService}
-          onChange={setHasService}
-        />
-      </div>
+
+      {isCreditCard && (
+        <div className="space-y-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30">
+          <p className="text-xs font-semibold text-red-500 uppercase tracking-wider">Параметри кредитки</p>
+          <Input label="Кредитний ліміт" type="number" value={creditLimit} onChange={e => setCreditLimit(e.target.value)} placeholder="50000" />
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Ставка % річних" type="number" value={interestRate} onChange={e => setInterestRate(e.target.value)} placeholder="36" />
+            <Input label="День оплати" type="number" value={paymentDay} onChange={e => setPaymentDay(e.target.value)} placeholder="25" />
+          </div>
+          <Input label="Поточна заборгованість" type="number" value={currentDebt} onChange={e => setCurrentDebt(e.target.value)} placeholder="0.00" />
+        </div>
+      )}
+
       <Button fullWidth onClick={handleSave} disabled={saving || (!bank.trim() && !accName.trim())}>{saving ? "Збереження..." : "Додати"}</Button>
     </Modal>
   );
@@ -446,7 +465,7 @@ export default function AccountsPage() {
     if (!user) { setLoading(false); return; }
 
     const [{ data: accs }, { data: cr }, { data: dep }, { data: col }] = await Promise.all([
-      supabase.from("accounts").select("id,name,type,balance,currency,icon,is_archived")
+      supabase.from("accounts").select("id,name,type,balance,currency,icon,is_archived,credit_limit,interest_rate,payment_day")
         .eq("user_id", user.id).neq("is_archived", true).order("created_at"),
       supabase.from("credits").select("id,name,type,bank,total_amount,remaining_amount,monthly_payment,payment_day,currency")
         .eq("user_id", user.id).neq("is_archived", true).order("created_at"),
@@ -563,11 +582,25 @@ export default function AccountsPage() {
       <Section title="💳 Банківські рахунки" total={totalBanking} onAdd={() => setModal("banking")}>
         {bankingAccs.length === 0 ? (
           <p className="text-xs text-neutral-400 text-center py-2">Немає банківських рахунків</p>
-        ) : bankingAccs.map(a => (
-          <AccountCard key={a.id} name={a.name} sub={a.currency}
-            balance={Number(a.balance)} currency={a.currency}
-            badge={a.icon ?? "💳"} onDelete={() => setDeleteTarget({ id: a.id, name: a.name })} />
-        ))}
+        ) : bankingAccs.map(a => {
+          const limit = Number(a.credit_limit ?? 0);
+          const isCc  = limit > 0;
+          const debt  = isCc ? Math.max(0, -Number(a.balance)) : 0;
+          const avail = isCc ? limit - debt : 0;
+          const sub   = isCc
+            ? [
+                `Ліміт: ${fmt(limit, a.currency)}`,
+                `Доступно: ${fmt(avail, a.currency)}`,
+                a.interest_rate ? `${a.interest_rate}% річних` : null,
+                a.payment_day   ? `оплата ${a.payment_day}-го` : null,
+              ].filter(Boolean).join(" · ")
+            : a.currency;
+          return (
+            <AccountCard key={a.id} name={a.name} sub={sub}
+              balance={Number(a.balance)} currency={a.currency}
+              badge={a.icon ?? "💳"} onDelete={() => setDeleteTarget({ id: a.id, name: a.name })} />
+          );
+        })}
       </Section>
 
       {/* ── Депозити — керуються через /credits ── */}

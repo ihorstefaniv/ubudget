@@ -16,3 +16,6 @@ ALTER TABLE profiles DROP COLUMN IF EXISTS envelope_mode;
 
 -- П20: Видалення дубльованого currency з profiles (використовується base_currency)
 ALTER TABLE profiles DROP COLUMN IF EXISTS currency;
+
+-- П17: Видалення невикористаної таблиці envelope_weeks (UI читає з transactions наживо)
+DROP TABLE IF EXISTS envelope_weeks;
