@@ -147,7 +147,7 @@ function TaskModal({ task, onSave, onDelete, onClose }: {
               value={form.title}
               onChange={e => set("title", e.target.value)}
               placeholder="Що треба зробити?"
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-orange-400"
             />
           </div>
 
@@ -159,7 +159,7 @@ function TaskModal({ task, onSave, onDelete, onClose }: {
               onChange={e => set("description", e.target.value || null)}
               rows={3}
               placeholder="Деталі, контекст, кроки..."
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400 resize-none"
+              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-orange-400 resize-none"
             />
           </div>
 
@@ -170,7 +170,7 @@ function TaskModal({ task, onSave, onDelete, onClose }: {
               <select
                 value={form.type}
                 onChange={e => set("type", e.target.value as TaskType)}
-                className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-orange-400"
               >
                 {TYPES.map(t => (
                   <option key={t.key} value={t.key}>{t.emoji} {t.label}</option>
@@ -182,7 +182,7 @@ function TaskModal({ task, onSave, onDelete, onClose }: {
               <select
                 value={form.priority}
                 onChange={e => set("priority", e.target.value as TaskPriority)}
-                className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-orange-400"
               >
                 {PRIORITIES.map(p => (
                   <option key={p.key} value={p.key}>{p.label}</option>
@@ -197,7 +197,7 @@ function TaskModal({ task, onSave, onDelete, onClose }: {
             <select
               value={form.status}
               onChange={e => set("status", e.target.value as TaskStatus)}
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-orange-400"
             >
               {STATUSES.map(s => (
                 <option key={s.key} value={s.key}>{s.label}</option>
@@ -212,7 +212,7 @@ function TaskModal({ task, onSave, onDelete, onClose }: {
               <select
                 value={form.assignee ?? ""}
                 onChange={e => set("assignee", e.target.value || null)}
-                className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-orange-400"
               >
                 <option value="">— не призначено —</option>
                 {ASSIGNEES.map(a => (
@@ -226,7 +226,7 @@ function TaskModal({ task, onSave, onDelete, onClose }: {
                 type="date"
                 value={form.due_date ?? ""}
                 onChange={e => set("due_date", e.target.value || null)}
-                className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-orange-400"
               />
             </div>
           </div>
@@ -243,7 +243,7 @@ function TaskModal({ task, onSave, onDelete, onClose }: {
               value={form.estimated_hrs ?? ""}
               onChange={e => set("estimated_hrs", e.target.value ? parseFloat(e.target.value) : null)}
               placeholder="0"
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+              className="w-full border border-neutral-200 rounded-xl px-3 py-2 text-sm text-neutral-900 bg-white focus:outline-none focus:border-orange-400"
             />
           </div>
         </div>
