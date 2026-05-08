@@ -124,7 +124,6 @@ function AppearanceTab() {
   const supabase = createClient();
   const [theme, setTheme]               = useState<"light" | "dark" | "system">("system");
   const [currency, setCurrency]         = useState("UAH");
-  const [envelopeMode, setEnvelopeMode] = useState(false);
   const [modules, setModules]           = useState<Modules>({
     budget: true, household: true, envelopes: true, investments: true, credits: true,
   });
@@ -141,11 +140,10 @@ function AppearanceTab() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
       const { data: profile } = await supabase
-        .from("profiles").select("currency, modules, envelope_mode").eq("id", data.user.id).single();
+        .from("profiles").select("base_currency, modules").eq("id", data.user.id).single();
       if (profile) {
-        if (profile.currency) setCurrency(profile.currency);
+        if (profile.base_currency) setCurrency(profile.base_currency);
         if (profile.modules)  setModules({ ...modules, ...profile.modules });
-        setEnvelopeMode(profile.envelope_mode ?? false);
       }
     });
   }, []);
@@ -170,7 +168,7 @@ function AppearanceTab() {
     const { data } = await supabase.auth.getUser();
     if (!data.user) { setSaving(false); return; }
     const { error } = await supabase.from("profiles")
-      .update({ currency, modules, envelope_mode: envelopeMode }).eq("id", data.user.id);
+      .update({ base_currency: currency, modules }).eq("id", data.user.id);
     if (!error) logActivity("appearance_save");
     setSaveMsg(error ? `Помилка: ${error.message}` : "Збережено");
     setSaving(false);
@@ -214,15 +212,6 @@ function AppearanceTab() {
             { value: "USD", label: "$ USD — Долар" },
             { value: "EUR", label: "€ EUR — Євро" },
           ]} />
-      </Section>
-
-      <Section title="Бюджетування">
-        <ToggleRow
-          label="Метод конвертів"
-          desc="Розподіл доходу на обов'язкові + тижневі конверти. План у Бюджеті береться з конвертів."
-          checked={envelopeMode}
-          onChange={v => setEnvelopeMode(v)}
-        />
       </Section>
 
       <Section title="Модулі" desc="Увімкніть або вимкніть розділи — вони зникнуть з навігації">

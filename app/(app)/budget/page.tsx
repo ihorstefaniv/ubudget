@@ -819,7 +819,7 @@ export default function BudgetPage() {
         .is("deleted_at", null),
       supabase.from("credits").select("name,monthly_payment,type")
         .eq("user_id", user.id).neq("is_archived", true).gt("monthly_payment", 0),
-      supabase.from("profiles").select("envelope_mode").eq("id", user.id).single(),
+      supabase.from("profiles").select("modules").eq("id", user.id).single(),
       supabase.from("envelope_settings").select("mandatory")
         .eq("user_id", user.id).eq("month", month).eq("year", year).single(),
     ]);
@@ -864,7 +864,7 @@ export default function BudgetPage() {
     const incPrev = INCOME_CATEGORIES.reduce((s, c) => s + (prevFactMap[c.id] ?? 0), 0);
 
     // Envelope mode plan override
-    const isEnvMode = profile?.envelope_mode ?? false;
+    const isEnvMode = profile?.modules?.envelopes ?? false;
     const envPlanMap: Record<string, number> = {};
     if (isEnvMode && envSettings?.mandatory) {
       (envSettings.mandatory as { category_key?: string; amount?: number; monthly_payment?: number }[]).forEach(item => {
