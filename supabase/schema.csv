@@ -1,0 +1,321 @@
+table_name,column_name,data_type,is_nullable,column_default,character_maximum_length
+accounts,id,uuid,NO,gen_random_uuid(),null
+accounts,user_id,uuid,YES,null,null
+accounts,name,text,NO,null,null
+accounts,type,text,NO,null,null
+accounts,currency,text,YES,'UAH'::text,null
+accounts,balance,numeric,YES,0,null
+accounts,is_active,boolean,YES,true,null
+accounts,created_at,timestamp with time zone,YES,now(),null
+accounts,bank,text,YES,null,null
+accounts,icon,text,YES,'💳'::text,null
+accounts,description,text,YES,null,null
+accounts,interest_rate,numeric,YES,null,null
+accounts,end_date,date,YES,null,null
+accounts,payment_day,integer,YES,null,null
+accounts,credit_limit,numeric,YES,null,null
+accounts,is_archived,boolean,YES,false,null
+accounts,updated_at,timestamp with time zone,YES,now(),null
+activity_logs,id,uuid,NO,gen_random_uuid(),null
+activity_logs,user_id,uuid,NO,null,null
+activity_logs,action,text,NO,null,null
+activity_logs,details,text,YES,null,null
+activity_logs,created_at,timestamp with time zone,NO,now(),null
+admin_logs,id,uuid,NO,gen_random_uuid(),null
+admin_logs,admin_id,uuid,NO,null,null
+admin_logs,action,text,NO,null,null
+admin_logs,target,text,YES,null,null
+admin_logs,details,text,YES,null,null
+admin_logs,created_at,timestamp with time zone,YES,now(),null
+admin_logs,level,text,YES,'info'::text,null
+bonds,id,uuid,NO,gen_random_uuid(),null
+bonds,user_id,uuid,NO,null,null
+bonds,name,text,NO,null,null
+bonds,type,text,YES,'ovdp'::text,null
+bonds,issuer,text,YES,null,null
+bonds,isin,text,YES,null,null
+bonds,amount,numeric,NO,null,null
+bonds,interest_rate,numeric,NO,null,null
+bonds,currency,text,YES,'UAH'::text,null
+bonds,buy_date,date,YES,null,null
+bonds,maturity_date,date,YES,null,null
+bonds,coupon_period,text,YES,null,null
+bonds,is_free_to_sell,boolean,YES,false,null
+bonds,created_at,timestamp with time zone,YES,now(),null
+bonds,updated_at,timestamp with time zone,YES,now(),null
+budgets,id,uuid,NO,gen_random_uuid(),null
+budgets,user_id,uuid,NO,null,null
+budgets,category_id,uuid,YES,null,null
+budgets,month,integer,NO,null,null
+budgets,year,integer,NO,null,null
+budgets,plan_amount,numeric,YES,0,null
+budgets,created_at,timestamp with time zone,YES,now(),null
+budgets,updated_at,timestamp with time zone,YES,now(),null
+budgets,category_key,text,YES,null,null
+business_employees,id,uuid,NO,gen_random_uuid(),null
+business_employees,business_id,uuid,NO,null,null
+business_employees,user_id,uuid,NO,null,null
+business_employees,name,text,NO,null,null
+business_employees,type,text,YES,'hired'::text,null
+business_employees,salary,numeric,NO,null,null
+business_employees,created_at,timestamp with time zone,YES,now(),null
+business_employees,role,text,YES,null,null
+business_items,id,uuid,NO,gen_random_uuid(),null
+business_items,business_id,uuid,NO,null,null
+business_items,user_id,uuid,NO,null,null
+business_items,section,text,NO,null,null
+business_items,label,text,NO,null,null
+business_items,amount,numeric,NO,null,null
+business_items,created_at,timestamp with time zone,YES,now(),null
+businesses,id,uuid,NO,gen_random_uuid(),null
+businesses,user_id,uuid,NO,null,null
+businesses,name,text,NO,null,null
+businesses,type,text,YES,null,null
+businesses,share,numeric,YES,100,null
+businesses,start_date,date,YES,null,null
+businesses,created_at,timestamp with time zone,YES,now(),null
+businesses,updated_at,timestamp with time zone,YES,now(),null
+categories,id,uuid,NO,gen_random_uuid(),null
+categories,user_id,uuid,NO,null,null
+categories,name,text,NO,null,null
+categories,icon,text,YES,'📦'::text,null
+categories,type,text,YES,'variable'::text,null
+categories,color,text,YES,'neutral'::text,null
+categories,sort_order,integer,YES,0,null
+categories,created_at,timestamp with time zone,YES,now(),null
+collections,id,uuid,NO,gen_random_uuid(),null
+collections,user_id,uuid,NO,null,null
+collections,name,text,NO,null,null
+collections,category,text,YES,'other'::text,null
+collections,description,text,YES,null,null
+collections,buy_price,numeric,NO,null,null
+collections,expected_price,numeric,YES,null,null
+collections,currency,text,YES,'UAH'::text,null
+collections,buy_date,date,YES,null,null
+collections,status,text,YES,'owned'::text,null
+collections,created_at,timestamp with time zone,YES,now(),null
+collections,updated_at,timestamp with time zone,YES,now(),null
+credits,id,uuid,NO,gen_random_uuid(),null
+credits,user_id,uuid,NO,null,null
+credits,name,text,NO,null,null
+credits,bank,text,YES,null,null
+credits,total_amount,numeric,NO,null,null
+credits,remaining_amount,numeric,NO,null,null
+credits,monthly_payment,numeric,NO,null,null
+credits,interest_rate,numeric,NO,null,null
+credits,real_rate,numeric,YES,null,null
+credits,currency,text,YES,'UAH'::text,null
+credits,start_date,date,YES,null,null
+credits,end_date,date,YES,null,null
+credits,payment_day,integer,YES,null,null
+credits,type,text,YES,'consumer'::text,null
+credits,is_archived,boolean,YES,false,null
+credits,created_at,timestamp with time zone,YES,now(),null
+credits,updated_at,timestamp with time zone,YES,now(),null
+credits,car_model,text,YES,null,null
+credits,car_year,integer,YES,null,null
+credits,kasko_amount,numeric,YES,null,null
+credits,registration_amount,numeric,YES,null,null
+deposits,id,uuid,NO,gen_random_uuid(),null
+deposits,user_id,uuid,NO,null,null
+deposits,name,text,NO,null,null
+deposits,bank,text,YES,null,null
+deposits,amount,numeric,NO,null,null
+deposits,interest_rate,numeric,NO,null,null
+deposits,currency,text,YES,'UAH'::text,null
+deposits,start_date,date,YES,null,null
+deposits,end_date,date,YES,null,null
+deposits,capitalization,boolean,YES,false,null
+deposits,coupon_period,text,YES,null,null
+deposits,is_archived,boolean,YES,false,null
+deposits,created_at,timestamp with time zone,YES,now(),null
+deposits,updated_at,timestamp with time zone,YES,now(),null
+envelope_income_sources,id,uuid,NO,gen_random_uuid(),null
+envelope_income_sources,user_id,uuid,NO,null,null
+envelope_income_sources,label,text,NO,null,null
+envelope_income_sources,amount,numeric,NO,null,null
+envelope_income_sources,expected_day,integer,YES,1,null
+envelope_income_sources,received,boolean,YES,false,null
+envelope_income_sources,month,integer,NO,null,null
+envelope_income_sources,year,integer,NO,null,null
+envelope_income_sources,created_at,timestamp with time zone,YES,now(),null
+envelope_settings,id,uuid,NO,gen_random_uuid(),null
+envelope_settings,user_id,uuid,NO,null,null
+envelope_settings,month,integer,NO,null,null
+envelope_settings,year,integer,NO,null,null
+envelope_settings,is_active,boolean,YES,true,null
+envelope_settings,weeks_count,integer,YES,4,null
+envelope_settings,created_at,timestamp with time zone,YES,now(),null
+envelope_settings,mandatory,jsonb,YES,'[]'::jsonb,null
+envelope_weeks,id,uuid,NO,gen_random_uuid(),null
+envelope_weeks,user_id,uuid,NO,null,null
+envelope_weeks,month,integer,NO,null,null
+envelope_weeks,year,integer,NO,null,null
+envelope_weeks,week_number,integer,NO,null,null
+envelope_weeks,budget,numeric,YES,0,null
+envelope_weeks,spent,numeric,YES,0,null
+envelope_weeks,carry,numeric,YES,0,null
+envelope_weeks,created_at,timestamp with time zone,YES,now(),null
+envelope_weeks,transactions,jsonb,YES,'[]'::jsonb,null
+error_logs,id,uuid,NO,gen_random_uuid(),null
+error_logs,level,text,YES,'error'::text,null
+error_logs,message,text,NO,null,null
+error_logs,path,text,YES,null,null
+error_logs,user_id,uuid,YES,null,null
+error_logs,created_at,timestamp with time zone,YES,now(),null
+exchange_rates,id,uuid,NO,gen_random_uuid(),null
+exchange_rates,currency,text,NO,null,null
+exchange_rates,rate,numeric,NO,null,null
+exchange_rates,date,date,NO,null,null
+exchange_rates,created_at,timestamp with time zone,YES,now(),null
+fuel_prices_history,id,uuid,NO,gen_random_uuid(),null
+fuel_prices_history,price_date,date,NO,null,null
+fuel_prices_history,data,jsonb,NO,null,null
+fuel_prices_history,created_at,timestamp with time zone,YES,now(),null
+merchants,id,uuid,NO,gen_random_uuid(),null
+merchants,user_id,uuid,NO,null,null
+merchants,category_id,uuid,YES,null,null
+merchants,name,text,NO,null,null
+merchants,has_bonus,boolean,YES,false,null
+merchants,bonus_percent,numeric,YES,null,null
+merchants,bonus_label,text,YES,null,null
+merchants,is_selected,boolean,YES,true,null
+merchants,is_custom,boolean,YES,false,null
+merchants,created_at,timestamp with time zone,YES,now(),null
+policy_backup_20260401,schemaname,name,YES,null,null
+policy_backup_20260401,tablename,name,YES,null,null
+policy_backup_20260401,policyname,name,YES,null,null
+policy_backup_20260401,permissive,text,YES,null,null
+policy_backup_20260401,roles,ARRAY,YES,null,null
+policy_backup_20260401,cmd,text,YES,null,null
+policy_backup_20260401,qual,text,YES,null,null
+policy_backup_20260401,with_check,text,YES,null,null
+post_comments,id,uuid,NO,gen_random_uuid(),null
+post_comments,post_id,uuid,NO,null,null
+post_comments,author_name,text,NO,null,null
+post_comments,content,text,NO,null,null
+post_comments,approved,boolean,YES,false,null
+post_comments,created_at,timestamp with time zone,YES,now(),null
+posts,id,uuid,NO,gen_random_uuid(),null
+posts,title,text,NO,null,null
+posts,slug,text,NO,null,null
+posts,content,text,YES,null,null
+posts,excerpt,text,YES,null,null
+posts,cover_url,text,YES,null,null
+posts,status,text,YES,'draft'::text,null
+posts,meta_title,text,YES,null,null
+posts,meta_desc,text,YES,null,null
+posts,og_image,text,YES,null,null
+posts,published_at,timestamp with time zone,YES,null,null
+posts,created_at,timestamp with time zone,YES,now(),null
+posts,updated_at,timestamp with time zone,YES,now(),null
+posts,category,text,YES,null,null
+profiles,id,uuid,NO,null,null
+profiles,full_name,text,YES,null,null
+profiles,base_currency,text,YES,'UAH'::text,null
+profiles,avatar_url,text,YES,null,null
+profiles,created_at,timestamp with time zone,YES,now(),null
+profiles,email,text,YES,null,null
+profiles,role,text,YES,'user'::text,null
+profiles,updated_at,timestamp with time zone,YES,now(),null
+profiles,envelope_mode,boolean,YES,false,null
+profiles,currency,character varying,YES,'UAH'::character varying,3
+profiles,modules,jsonb,YES,"'{""budget"": true, ""credits"": false, ""envelopes"": false, ""household"": false, ""investments"": false}'::jsonb",null
+profiles,notifications,jsonb,YES,"'{""tips"": false, ""goals"": false, ""weekly"": true, ""monthly"": true, ""noIncome"": true, ""payments"": true, ""budgetOver"": true}'::jsonb",null
+profiles,phone,text,YES,null,null
+profiles,birthday,date,YES,null,null
+real_estate,id,uuid,NO,gen_random_uuid(),null
+real_estate,user_id,uuid,NO,null,null
+real_estate,name,text,NO,null,null
+real_estate,address,text,YES,null,null
+real_estate,area,numeric,YES,null,null
+real_estate,buy_price,numeric,NO,null,null
+real_estate,current_price,numeric,NO,null,null
+real_estate,rental_income,numeric,YES,0,null
+real_estate,currency,text,YES,'UAH'::text,null
+real_estate,buy_date,date,YES,null,null
+real_estate,created_at,timestamp with time zone,YES,now(),null
+real_estate,updated_at,timestamp with time zone,YES,now(),null
+recurring_transactions,id,uuid,NO,gen_random_uuid(),null
+recurring_transactions,user_id,uuid,NO,null,null
+recurring_transactions,account_id,uuid,YES,null,null
+recurring_transactions,category_id,uuid,YES,null,null
+recurring_transactions,type,text,NO,null,null
+recurring_transactions,amount,numeric,NO,null,null
+recurring_transactions,currency,text,YES,'UAH'::text,null
+recurring_transactions,note,text,YES,null,null
+recurring_transactions,interval,text,NO,null,null
+recurring_transactions,next_date,date,NO,null,null
+recurring_transactions,is_active,boolean,YES,true,null
+recurring_transactions,created_at,timestamp with time zone,YES,now(),null
+shocks,id,uuid,NO,gen_random_uuid(),null
+shocks,user_id,uuid,NO,null,null
+shocks,title,text,NO,null,null
+shocks,description,text,YES,null,null
+shocks,category,text,YES,'other'::text,null
+shocks,severity,text,YES,'moderate'::text,null
+shocks,status,text,YES,'active'::text,null
+shocks,amount,numeric,YES,0,null
+shocks,amount_paid,numeric,YES,0,null
+shocks,currency,text,YES,'UAH'::text,null
+shocks,date,date,YES,CURRENT_DATE,null
+shocks,resolved_date,date,YES,null,null
+shocks,created_at,timestamp with time zone,YES,now(),null
+site_settings,key,text,NO,null,null
+site_settings,value,text,YES,null,null
+site_settings,updated_at,timestamp with time zone,YES,now(),null
+stocks,id,uuid,NO,gen_random_uuid(),null
+stocks,user_id,uuid,NO,null,null
+stocks,ticker,text,NO,null,null
+stocks,name,text,NO,null,null
+stocks,broker,text,YES,null,null
+stocks,quantity,numeric,NO,null,null
+stocks,buy_price,numeric,NO,null,null
+stocks,current_price,numeric,NO,null,null
+stocks,currency,text,YES,'USD'::text,null
+stocks,buy_date,date,YES,null,null
+stocks,created_at,timestamp with time zone,YES,now(),null
+stocks,updated_at,timestamp with time zone,YES,now(),null
+subcategories,id,uuid,NO,gen_random_uuid(),null
+subcategories,user_id,uuid,NO,null,null
+subcategories,category_id,uuid,YES,null,null
+subcategories,name,text,NO,null,null
+subcategories,icon,text,YES,'📌'::text,null
+subcategories,created_at,timestamp with time zone,YES,now(),null
+subcategories,sort_order,integer,YES,0,null
+tickets,id,bigint,NO,null,null
+tickets,number,text,YES,null,null
+tickets,user_id,uuid,YES,null,null
+tickets,email,text,YES,null,null
+tickets,subject,text,NO,null,null
+tickets,message,text,NO,null,null
+tickets,status,text,YES,'new'::text,null
+tickets,admin_reply,text,YES,null,null
+tickets,created_at,timestamp with time zone,YES,now(),null
+tickets,updated_at,timestamp with time zone,YES,now(),null
+tickets,assignee_id,uuid,YES,null,null
+tickets,screenshot_url,text,YES,null,null
+tickets,source_url,text,YES,null,null
+transactions,id,uuid,NO,gen_random_uuid(),null
+transactions,user_id,uuid,NO,null,null
+transactions,account_id,uuid,YES,null,null
+transactions,category_id,uuid,YES,null,null
+transactions,type,text,NO,null,null
+transactions,amount,numeric,NO,null,null
+transactions,currency,text,YES,'UAH'::text,null
+transactions,note,text,YES,null,null
+transactions,receipt_url,text,YES,null,null
+transactions,is_recurring,boolean,YES,false,null
+transactions,recurring_interval,text,YES,null,null
+transactions,transaction_date,date,YES,CURRENT_DATE,null
+transactions,created_at,timestamp with time zone,YES,now(),null
+transactions,updated_at,timestamp with time zone,YES,now(),null
+transactions,deleted_at,timestamp with time zone,YES,null,null
+transactions,category_key,text,YES,null,null
+transactions,to_account_id,uuid,YES,null,null
+transactions,exchange_rate,numeric,NO,1,null
+transactions,to_amount,numeric,YES,null,null
+user_modules,id,uuid,NO,gen_random_uuid(),null
+user_modules,user_id,uuid,YES,null,null
+user_modules,module_name,text,YES,null,null
+user_modules,is_enabled,boolean,YES,true,null
