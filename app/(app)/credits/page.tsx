@@ -82,6 +82,17 @@ function depositIncome(d: Deposit) {
 
 const NBU_RATE = 14.5;
 
+function isInterestDue(startDate: string | null, couponPeriod: string): boolean {
+  if (!startDate) return false;
+  const start = new Date(startDate);
+  const today = new Date();
+  if (today.getDate() !== start.getDate()) return false;
+  const periods: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 };
+  const periodMonths = periods[couponPeriod] ?? 1;
+  const monthsSince = (today.getFullYear() - start.getFullYear()) * 12 + today.getMonth() - start.getMonth();
+  return monthsSince > 0 && monthsSince % periodMonths === 0;
+}
+
 const TYPE_META: Record<CreditType, { label: string; emoji: string }> = {
   consumer:    { label: "Споживчий",        emoji: "💳" },
   car:         { label: "Авто кредит",      emoji: "🚗" },
@@ -1037,6 +1048,9 @@ function DepositsTab({ deposits, accounts, onReload }: { deposits: Deposit[]; ac
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${dLeft <= 30 ? "bg-amber-100 dark:bg-amber-950/30 text-amber-600" : "bg-green-100 dark:bg-green-950/20 text-green-600"}`}>
                             {dLeft <= 30 ? `${dLeft} дн.` : "Активний"}
                           </span>
+                        )}
+                        {isInterestDue(d.start_date, d.coupon_period) && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-950/20 text-green-600 font-medium">% сьогодні</span>
                         )}
                         {d.capitalization && <span className="text-xs text-neutral-400">+ кап.</span>}
                       </div>

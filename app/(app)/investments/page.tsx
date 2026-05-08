@@ -24,6 +24,16 @@ function fmt(n: number, cur = "UAH") {
 function pct(n: number) { return `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`; }
 function monthsLeft(d: string) { const e = new Date(d), n = new Date(); return Math.max(0, (e.getFullYear() - n.getFullYear()) * 12 + e.getMonth() - n.getMonth()); }
 function toUAH(n: number, cur: string) { return n * rateFor(FALLBACK_RATES, cur); }
+function isCouponDue(buyDate: string | null, couponPeriod: string): boolean {
+  if (!buyDate) return false;
+  const start = new Date(buyDate);
+  const today = new Date();
+  if (today.getDate() !== start.getDate()) return false;
+  const periods: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 };
+  const periodMonths = periods[couponPeriod] ?? 12;
+  const monthsSince = (today.getFullYear() - start.getFullYear()) * 12 + today.getMonth() - start.getMonth();
+  return monthsSince > 0 && monthsSince % periodMonths === 0;
+}
 
 const Icon = ({ d, className = "w-5 h-5" }: { d: string; className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
@@ -335,10 +345,76 @@ function BondModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: (
   );
 }
 
+function BondCouponModal({ bond, onClose, onSaved }: { bond: Bond; onClose: () => void; onSaved: () => void }) {
+  const supabase = createClient();
+  const [saving, setSaving]   = useState(false);
+  const [accounts, setAccounts] = useState<{ id: string; name: string; currency: string }[]>([]);
+  const [accountId, setAccountId] = useState("");
+  const [date, setDate]       = useState(new Date().toISOString().slice(0, 10));
+  const periods: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 };
+  const periodMonths = periods[bond.coupon_period] ?? 12;
+  const couponAmount = bond.amount * (bond.interest_rate / 100) * (periodMonths / 12);
+  const [amount, setAmount]   = useState(String(Math.round(couponAmount)));
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from("accounts").select("id,name,currency").eq("user_id", user.id).eq("is_archived", false).then(({ data }) => {
+        setAccounts(data ?? []);
+        setAccountId(data?.[0]?.id ?? "");
+      });
+    });
+  }, []);
+
+  async function save() {
+    if (!accountId || !amount || +amount <= 0) return;
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+    await supabase.from("transactions").insert({
+      user_id: user.id, type: "income", category_key: "invest",
+      account_id: accountId, amount: +amount, currency: bond.currency,
+      exchange_rate: 1, transaction_date: date,
+      note: `Купон: ${bond.name}`,
+    });
+    setSaving(false); onSaved(); onClose();
+  }
+
+  return (
+    <ModalWrap title="Купонний дохід" onClose={onClose}>
+      <div className="p-4 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30">
+        <p className="text-xs text-neutral-500">{bond.name} · {bond.interest_rate}% · {bond.issuer}</p>
+        <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mt-1">
+          Купон за період: <span className="text-green-500 font-bold">+{fmt(couponAmount, bond.currency)}</span>
+        </p>
+      </div>
+      {accounts.length > 0 && (
+        <Field label="Зарахувати на рахунок">
+          <select className={inp} value={accountId} onChange={e => setAccountId(e.target.value)}>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
+          </select>
+        </Field>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Сума">
+          <input type="number" className={inp} value={amount} onChange={e => setAmount(e.target.value)} min="0.01" step="0.01" />
+        </Field>
+        <Field label="Дата">
+          <input type="date" className={inp} value={date} onChange={e => setDate(e.target.value)} />
+        </Field>
+      </div>
+      <button className={btnPrimary} onClick={save} disabled={saving}>
+        {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : "Зарахувати купон"}
+      </button>
+    </ModalWrap>
+  );
+}
+
 function BondsTab({ bonds, onReload }: { bonds: Bond[]; onReload: () => void }) {
   const supabase = createClient();
   const [modal, setModal] = useState(false);
   const [editItem, setEditItem] = useState<Bond | undefined>();
+  const [couponBond, setCouponBond] = useState<Bond | undefined>();
   const [filter, setFilter] = useState("all");
   const filtered = bonds.filter(b => filter === "all" || b.type === filter);
   const totalUAH    = bonds.reduce((s, b) => s + toUAH(b.amount, b.currency), 0);
@@ -378,10 +454,14 @@ function BondsTab({ bonds, onReload }: { bonds: Bond[]; onReload: () => void }) 
                         <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{b.name}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${b.type === "ovdp" ? "bg-blue-100 dark:bg-blue-950/30 text-blue-600" : "bg-purple-100 dark:bg-purple-950/30 text-purple-600"}`}>{b.type === "ovdp" ? "ОВДП" : "Корпоративна"}</span>
                         {b.is_free_to_sell && <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-950/20 text-green-600 font-medium">Вільна до продажу</span>}
+                        {isCouponDue(b.buy_date, b.coupon_period) && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/30 text-amber-600 font-medium">Купон сьогодні</span>
+                        )}
                       </div>
                       <p className="text-xs text-neutral-400 mt-0.5">{b.issuer}{b.isin ? ` · ${b.isin}` : ""}</p>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button onClick={() => setCouponBond(b)} className="flex items-center gap-1 px-2 h-7 rounded-lg bg-green-50 dark:bg-green-950/30 text-green-600 hover:bg-green-100 text-xs font-medium transition-colors">Купон</button>
                       <button onClick={() => { setEditItem(b); setModal(true); }} className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-orange-400 flex items-center justify-center"><Icon d={icons.edit} className="w-3.5 h-3.5" /></button>
                       <button onClick={() => del(b.id)} className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-red-400 flex items-center justify-center"><Icon d={icons.trash} className="w-3.5 h-3.5" /></button>
                     </div>
@@ -404,6 +484,7 @@ function BondsTab({ bonds, onReload }: { bonds: Bond[]; onReload: () => void }) 
         )}
       </div>
       {modal && <BondModal onClose={() => { setModal(false); setEditItem(undefined); }} onSaved={onReload} edit={editItem} />}
+      {couponBond && <BondCouponModal bond={couponBond} onClose={() => setCouponBond(undefined)} onSaved={onReload} />}
     </div>
   );
 }
