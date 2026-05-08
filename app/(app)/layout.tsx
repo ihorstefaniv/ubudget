@@ -347,6 +347,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setMobileOpen(false);
   }, [pathname]);
 
+  // Адмінка має власний layout — не обгортаємо
+  if (pathname.startsWith("/admin")) {
+    return <FeaturesProvider>{children}</FeaturesProvider>;
+  }
+
   return (
     <FeaturesProvider>
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex">
