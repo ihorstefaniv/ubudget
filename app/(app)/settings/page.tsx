@@ -414,7 +414,6 @@ function SecurityTab() {
         supabase.from("budgets").delete().eq("user_id", uid),
         supabase.from("credits").delete().eq("user_id", uid),
         supabase.from("envelope_settings").delete().eq("user_id", uid),
-        supabase.from("envelope_income_sources").delete().eq("user_id", uid),
       ]);
       await supabase.from("merchants").delete().in("category_id",
         (await supabase.from("categories").select("id").eq("user_id", uid)).data?.map(c => c.id) ?? []

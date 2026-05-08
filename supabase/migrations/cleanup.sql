@@ -19,3 +19,12 @@ ALTER TABLE profiles DROP COLUMN IF EXISTS currency;
 
 -- П17: Видалення невикористаної таблиці envelope_weeks (UI читає з transactions наживо)
 DROP TABLE IF EXISTS envelope_weeks;
+
+-- П18: Видалення envelope_income_sources (UI конвертів не читає цю таблицю)
+DROP TABLE IF EXISTS envelope_income_sources;
+
+-- П3: Видалення accounts.bank (банк вже входить у назву рахунку при створенні)
+ALTER TABLE accounts DROP COLUMN IF EXISTS bank;
+
+-- П10: Видалення budgets.category_id (код використовує category_key, не FK)
+ALTER TABLE budgets DROP COLUMN IF EXISTS category_id;
