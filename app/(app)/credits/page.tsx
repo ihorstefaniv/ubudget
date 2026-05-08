@@ -20,6 +20,8 @@ const extraIcons = {
 type Tab = "credits" | "deposits" | "archive";
 type CreditType = "consumer" | "car" | "mortgage" | "credit_card" | "installment" | "partpay";
 
+interface Account { id: string; name: string; currency: string; balance: number; }
+
 interface Credit {
   id: string;
   user_id: string;
@@ -102,6 +104,240 @@ function Field({ label, required, error, children }: { label: string; required?:
       {children}
       {error && <p className="text-xs text-red-500 mt-0.5">{error}</p>}
     </div>
+  );
+}
+
+// ─── Credit Payment Modal ─────────────────────────────────────
+function PaymentModal({ credit, accounts, onClose, onSaved }: {
+  credit: Credit; accounts: Account[]; onClose: () => void; onSaved: () => void;
+}) {
+  const supabase = createClient();
+  const [saving, setSaving]       = useState(false);
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [amount, setAmount]       = useState(String(credit.monthly_payment));
+  const [date, setDate]           = useState(new Date().toISOString().slice(0, 10));
+  const [note, setNote]           = useState(`Платіж: ${credit.name}`);
+
+  async function pay() {
+    if (!accountId || !amount || +amount <= 0) return;
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+
+    const payAmt = +amount;
+    const newRemaining = Math.max(0, Number(credit.remaining_amount) - payAmt);
+
+    await Promise.all([
+      supabase.from("transactions").insert({
+        user_id: user.id,
+        type: "expense",
+        category_key: "other",
+        account_id: accountId,
+        amount: payAmt,
+        currency: credit.currency,
+        exchange_rate: 1,
+        transaction_date: date,
+        note: note || `Платіж: ${credit.name}`,
+      }),
+      supabase.from("credits").update({ remaining_amount: newRemaining }).eq("id", credit.id),
+    ]);
+
+    setSaving(false);
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal title={`Платіж: ${credit.name}`} onClose={onClose}>
+      <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 flex justify-between items-center">
+        <div>
+          <p className="text-xs text-neutral-500">Залишок боргу</p>
+          <p className="text-xl font-bold text-red-500">{fmt(Number(credit.remaining_amount), credit.currency)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-neutral-500">Щомісячний платіж</p>
+          <p className="text-lg font-semibold text-orange-500">{fmt(Number(credit.monthly_payment), credit.currency)}</p>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-neutral-500">Списати з рахунку<span className="text-red-400 ml-0.5">*</span></label>
+        <select value={accountId} onChange={e => setAccountId(e.target.value)} className={inp}>
+          {accounts.map(a => (
+            <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-neutral-500">Сума<span className="text-red-400 ml-0.5">*</span></label>
+          <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
+            min="1" className={inp} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-neutral-500">Дата</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp} />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-neutral-500">Нотатка</label>
+        <input value={note} onChange={e => setNote(e.target.value)} className={inp} />
+      </div>
+
+      {+amount > 0 && (
+        <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700 text-xs text-neutral-500 flex justify-between">
+          <span>Залишок після платежу:</span>
+          <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+            {fmt(Math.max(0, Number(credit.remaining_amount) - +amount), credit.currency)}
+          </span>
+        </div>
+      )}
+
+      <Button onClick={pay} loading={saving} fullWidth>Підтвердити платіж</Button>
+    </Modal>
+  );
+}
+
+// ─── Deposit Interest Modal ────────────────────────────────────
+function DepositInterestModal({ deposit, accounts, onClose, onSaved }: {
+  deposit: Deposit; accounts: Account[]; onClose: () => void; onSaved: () => void;
+}) {
+  const supabase = createClient();
+  const [saving, setSaving]       = useState(false);
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [amount, setAmount]       = useState("");
+  const [date, setDate]           = useState(new Date().toISOString().slice(0, 10));
+
+  async function save() {
+    if (!accountId || !amount || +amount <= 0) return;
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+
+    await supabase.from("transactions").insert({
+      user_id: user.id,
+      type: "income",
+      category_key: "invest",
+      account_id: accountId,
+      amount: +amount,
+      currency: deposit.currency,
+      exchange_rate: 1,
+      transaction_date: date,
+      note: `Відсотки: ${deposit.name}`,
+    });
+
+    setSaving(false);
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal title="Нарахування відсотків" onClose={onClose}>
+      <div className="p-4 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30">
+        <p className="text-xs text-neutral-500">{deposit.name} · {deposit.interest_rate}% · {deposit.bank}</p>
+        <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mt-1">
+          Очікуваний дохід: <span className="text-green-500 font-bold">+{fmt(depositIncome(deposit), deposit.currency)}</span>
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-neutral-500">Зарахувати на рахунок<span className="text-red-400 ml-0.5">*</span></label>
+        <select value={accountId} onChange={e => setAccountId(e.target.value)} className={inp}>
+          {accounts.map(a => (
+            <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-neutral-500">Сума відсотків<span className="text-red-400 ml-0.5">*</span></label>
+          <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
+            placeholder={String(Math.round(depositIncome(deposit)))} min="0.01" step="0.01" className={inp} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-neutral-500">Дата</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp} />
+        </div>
+      </div>
+
+      <Button onClick={save} loading={saving} fullWidth>Зарахувати дохід</Button>
+    </Modal>
+  );
+}
+
+// ─── Close Deposit Modal ───────────────────────────────────────
+function CloseDepositModal({ deposit, accounts, onClose, onSaved }: {
+  deposit: Deposit; accounts: Account[]; onClose: () => void; onSaved: () => void;
+}) {
+  const supabase = createClient();
+  const [saving, setSaving]       = useState(false);
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [date, setDate]           = useState(new Date().toISOString().slice(0, 10));
+  const earned = depositIncome(deposit);
+
+  async function close() {
+    if (!accountId) return;
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+
+    const total = Number(deposit.amount) + earned;
+    await Promise.all([
+      supabase.from("transactions").insert({
+        user_id: user.id,
+        type: "income",
+        category_key: "invest",
+        account_id: accountId,
+        amount: total,
+        currency: deposit.currency,
+        exchange_rate: 1,
+        transaction_date: date,
+        note: `Закриття депозиту: ${deposit.name}`,
+      }),
+      supabase.from("deposits").update({ is_archived: true }).eq("id", deposit.id),
+    ]);
+
+    setSaving(false);
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal title="Закрити депозит" onClose={onClose}>
+      <div className="space-y-2">
+        <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700 flex justify-between">
+          <span className="text-xs text-neutral-500">Тіло депозиту</span>
+          <span className="text-sm font-semibold">{fmt(Number(deposit.amount), deposit.currency)}</span>
+        </div>
+        <div className="p-4 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30 flex justify-between">
+          <span className="text-xs text-neutral-500">Зароблені відсотки</span>
+          <span className="text-sm font-semibold text-green-500">+{fmt(earned, deposit.currency)}</span>
+        </div>
+        <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30 flex justify-between">
+          <span className="text-sm font-semibold text-orange-600">Всього до рахунку</span>
+          <span className="text-lg font-bold text-orange-500">{fmt(Number(deposit.amount) + earned, deposit.currency)}</span>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-neutral-500">Зарахувати на рахунок<span className="text-red-400 ml-0.5">*</span></label>
+        <select value={accountId} onChange={e => setAccountId(e.target.value)} className={inp}>
+          {accounts.map(a => (
+            <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-neutral-500">Дата закриття</label>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp} />
+      </div>
+
+      <Button onClick={close} loading={saving} fullWidth>Закрити та зарахувати</Button>
+    </Modal>
   );
 }
 
@@ -514,10 +750,11 @@ function DepositModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved
 }
 
 // ─── Credits Tab ──────────────────────────────────────────────
-function CreditsTab({ credits, onReload }: { credits: Credit[]; onReload: () => void }) {
+function CreditsTab({ credits, accounts, onReload }: { credits: Credit[]; accounts: Account[]; onReload: () => void }) {
   const supabase = createClient();
-  const [modal, setModal]       = useState(false);
-  const [editItem, setEditItem] = useState<Credit | undefined>();
+  const [modal, setModal]         = useState(false);
+  const [editItem, setEditItem]   = useState<Credit | undefined>();
+  const [payCredit, setPayCredit] = useState<Credit | undefined>();
 
   const active      = credits.filter(c => !c.is_archived);
   const totalDebt   = active.reduce((s, c) => s + Number(c.remaining_amount), 0);
@@ -600,6 +837,12 @@ function CreditsTab({ credits, onReload }: { credits: Credit[]; onReload: () => 
                       </p>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      {accounts.length > 0 && (
+                        <button onClick={() => setPayCredit(c)}
+                          className="flex items-center gap-1 px-2.5 h-7 rounded-lg bg-orange-50 dark:bg-orange-950/30 text-orange-500 hover:bg-orange-100 text-xs font-medium transition-colors">
+                          💳 Платіж
+                        </button>
+                      )}
                       <button onClick={() => { setEditItem(c); setModal(true); }}
                         className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-orange-400 flex items-center justify-center transition-colors">
                         <Icon d={icons.edit} className="w-3.5 h-3.5" />
@@ -684,15 +927,18 @@ function CreditsTab({ credits, onReload }: { credits: Credit[]; onReload: () => 
       )}
 
       {modal && <CreditModal onClose={() => { setModal(false); setEditItem(undefined); }} onSaved={onReload} edit={editItem} />}
+      {payCredit && <PaymentModal credit={payCredit} accounts={accounts} onClose={() => setPayCredit(undefined)} onSaved={onReload} />}
     </div>
   );
 }
 
 // ─── Deposits Tab ─────────────────────────────────────────────
-function DepositsTab({ deposits, onReload }: { deposits: Deposit[]; onReload: () => void }) {
+function DepositsTab({ deposits, accounts, onReload }: { deposits: Deposit[]; accounts: Account[]; onReload: () => void }) {
   const supabase = createClient();
-  const [modal, setModal]       = useState(false);
-  const [editItem, setEditItem] = useState<Deposit | undefined>();
+  const [modal, setModal]             = useState(false);
+  const [editItem, setEditItem]       = useState<Deposit | undefined>();
+  const [interestDep, setInterestDep] = useState<Deposit | undefined>();
+  const [closeDep, setCloseDep]       = useState<Deposit | undefined>();
 
   const active      = deposits.filter(d => !d.is_archived);
   const totalUAH    = active.filter(d => d.currency === "UAH").reduce((s, d) => s + Number(d.amount), 0);
@@ -785,6 +1031,18 @@ function DepositsTab({ deposits, onReload }: { deposits: Deposit[]; onReload: ()
                       <p className="text-xs text-neutral-400 mt-0.5">{d.bank} · {d.currency}</p>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      {accounts.length > 0 && (
+                        <>
+                          <button onClick={() => setInterestDep(d)}
+                            className="flex items-center gap-1 px-2 h-7 rounded-lg bg-green-50 dark:bg-green-950/30 text-green-600 hover:bg-green-100 text-xs font-medium transition-colors">
+                            % дохід
+                          </button>
+                          <button onClick={() => setCloseDep(d)}
+                            className="flex items-center gap-1 px-2 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 hover:bg-amber-100 text-xs font-medium transition-colors">
+                            Закрити
+                          </button>
+                        </>
+                      )}
                       <button onClick={() => { setEditItem(d); setModal(true); }}
                         className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-400 hover:text-orange-400 flex items-center justify-center transition-colors">
                         <Icon d={icons.edit} className="w-3.5 h-3.5" />
@@ -821,6 +1079,8 @@ function DepositsTab({ deposits, onReload }: { deposits: Deposit[]; onReload: ()
       </Card>
 
       {modal && <DepositModal onClose={() => { setModal(false); setEditItem(undefined); }} onSaved={onReload} edit={editItem} />}
+      {interestDep && <DepositInterestModal deposit={interestDep} accounts={accounts} onClose={() => setInterestDep(undefined)} onSaved={onReload} />}
+      {closeDep && <CloseDepositModal deposit={closeDep} accounts={accounts} onClose={() => setCloseDep(undefined)} onSaved={onReload} />}
     </div>
   );
 }
@@ -928,18 +1188,21 @@ export default function CreditsDepositsPage() {
   const [tab, setTab]           = useState<Tab>("credits");
   const [credits, setCredits]   = useState<Credit[]>([]);
   const [deposits, setDeposits] = useState<Deposit[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading]   = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
-    const [{ data: cr }, { data: dep }] = await Promise.all([
+    const [{ data: cr }, { data: dep }, { data: accs }] = await Promise.all([
       supabase.from("credits").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("deposits").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      supabase.from("accounts").select("id,name,currency,balance").eq("user_id", user.id).eq("is_archived", false).order("name"),
     ]);
     setCredits(cr ?? []);
     setDeposits(dep ?? []);
+    setAccounts(accs ?? []);
     setLoading(false);
   }, []);
 
@@ -967,8 +1230,8 @@ export default function CreditsDepositsPage() {
         </div>
       ) : (
         <>
-          {tab === "credits"  && <CreditsTab  credits={credits}   onReload={load} />}
-          {tab === "deposits" && <DepositsTab deposits={deposits} onReload={load} />}
+          {tab === "credits"  && <CreditsTab  credits={credits}   accounts={accounts} onReload={load} />}
+          {tab === "deposits" && <DepositsTab deposits={deposits} accounts={accounts} onReload={load} />}
           {tab === "archive"  && <ArchiveTab  credits={credits}   deposits={deposits} />}
         </>
       )}

@@ -17,6 +17,7 @@ interface Transaction {
   currency: string;
   exchange_rate: number;        // UAH за 1 одиницю валюти
   to_account_id: string | null; // для переказів
+  to_amount?: number | null;    // сума яку отримує to_account (може відрізнятись при різних валютах)
   category_key: string;
   account_id: string | null;
   transaction_date: string;
@@ -545,41 +546,25 @@ export default function TransactionsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Оновлює баланс рахунку на delta (в нативній валюті рахунку)
-  async function shiftBalance(accountId: string, delta: number) {
-    const { data } = await supabase.from("accounts").select("balance").eq("id", accountId).single();
-    if (!data) return;
-    await supabase.from("accounts").update({ balance: Number(data.balance) + delta }).eq("id", accountId);
-  }
-
-  // Розраховує суму яку отримує to_account при переказі
+  // Розраховує суму яку отримує to_account при переказі (зберігається в to_amount для DB-тригера)
   function calcToAmount(tx: Omit<Transaction, "id">, fromCurrency: string, toCurrency: string): number {
     if (fromCurrency === toCurrency) return tx.amount;
     if (toCurrency === "UAH") return tx.amount * tx.exchange_rate;
     if (fromCurrency === "UAH") return tx.amount / tx.exchange_rate;
-    // обидві іноземні — через UAH
-    return tx.amount;
-  }
-
-  // Застосовує ефект транзакції на баланси (sign=+1 додати, sign=-1 відкотити)
-  async function applyToBalances(tx: Omit<Transaction, "id">, sign: 1 | -1) {
-    const fromAcc = accounts.find(a => a.id === tx.account_id);
-    const toAcc   = accounts.find(a => a.id === tx.to_account_id);
-    if (!fromAcc) return;
-
-    if (tx.type === "income") {
-      await shiftBalance(fromAcc.id, sign * tx.amount);
-    } else if (tx.type === "expense") {
-      await shiftBalance(fromAcc.id, -sign * tx.amount);
-    } else if (tx.type === "transfer" && toAcc) {
-      await shiftBalance(fromAcc.id, -sign * tx.amount);
-      await shiftBalance(toAcc.id, sign * calcToAmount(tx, fromAcc.currency, toAcc.currency));
-    }
+    return tx.amount * tx.exchange_rate;
   }
 
   async function handleSave(data: Omit<Transaction, "id">) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
+
+    // Для переказів між рахунками зберігаємо to_amount — DB-тригер оновить баланс отримувача
+    let toAmount: number | null = null;
+    if (data.type === "transfer" && data.to_account_id) {
+      const fromAcc = accounts.find(a => a.id === data.account_id);
+      const toAcc   = accounts.find(a => a.id === data.to_account_id);
+      if (fromAcc && toAcc) toAmount = calcToAmount(data, fromAcc.currency, toAcc.currency);
+    }
 
     if (editTx) {
       const { error } = await supabase
@@ -590,6 +575,7 @@ export default function TransactionsPage() {
           currency:           data.currency,
           exchange_rate:      data.exchange_rate,
           to_account_id:      data.to_account_id,
+          to_amount:          toAmount,
           category_key:       data.category_key,
           account_id:         data.account_id,
           transaction_date:   data.transaction_date,
@@ -602,9 +588,6 @@ export default function TransactionsPage() {
         .eq("id", editTx.id)
         .eq("user_id", user.id);
       if (error) throw error;
-      // Відкочуємо старий ефект і застосовуємо новий
-      await applyToBalances(editTx, -1);
-      await applyToBalances(data, +1);
       setTxs(prev => prev.map(t => t.id === editTx.id ? { id: editTx.id, ...data } : t));
     } else {
       const { data: inserted, error } = await supabase
@@ -616,6 +599,7 @@ export default function TransactionsPage() {
           currency:           data.currency,
           exchange_rate:      data.exchange_rate,
           to_account_id:      data.to_account_id,
+          to_amount:          toAmount,
           category_key:       data.category_key,
           account_id:         data.account_id,
           transaction_date:   data.transaction_date,
@@ -627,7 +611,6 @@ export default function TransactionsPage() {
         .select("id")
         .single();
       if (error) throw error;
-      await applyToBalances(data, +1);
       setTxs(prev => [{ id: inserted.id, ...data }, ...prev]);
     }
   }
@@ -635,14 +618,11 @@ export default function TransactionsPage() {
   async function deleteTx(id: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const tx = txs.find(t => t.id === id);
     await supabase
       .from("transactions")
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", id)
       .eq("user_id", user.id);
-    // Відкочуємо ефект видаленої транзакції
-    if (tx) await applyToBalances(tx, -1);
     setTxs(prev => prev.filter(t => t.id !== id));
   }
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Icon, icons, Card, StatCard, ProgressBar } from "@/components/ui";
 import { getCategoryDef } from "@/lib/category-registry";
+import { fetchNbuRates, rateFor } from "@/lib/nbu-rates";
 
 type Period = "month" | "quarter" | "year";
 
@@ -17,9 +18,6 @@ interface Bond { id: string; amount: number; currency: string; }
 interface RealEstate { id: string; current_price: number; }
 interface BusinessItem { id: string; business_id: string; section: string; amount: number; }
 interface Collection { id: string; expected_price: number; currency: string; status: string; }
-
-const USD_RATE = 41.5;
-function toUAH(n: number, cur: string) { return n * (cur === "USD" ? USD_RATE : cur === "EUR" ? USD_RATE * 1.08 : 1); }
 
 // ─── Helpers ──────────────────────────────────────────────────
 function fmt(n: number, cur = "UAH") {
@@ -94,6 +92,7 @@ export default function DashboardPage() {
   const [businessItems, setBusinessItems] = useState<BusinessItem[]>([]);
   const [collections, setCollections]   = useState<Collection[]>([]);
   const [envelopesActive, setEnvelopesActive] = useState(false);
+  const [nbuRates, setNbuRates] = useState<Record<string, number>>({ USD: 41.5, EUR: 44.8, PLN: 10.2 });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,10 +142,13 @@ export default function DashboardPage() {
     setBusinessItems(bi ?? []);
     setCollections(col ?? []);
     setEnvelopesActive(envSettings?.is_active ?? false);
+    fetchNbuRates().then(setNbuRates);
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const toUAH = (n: number, cur: string) => n * rateFor(nbuRates, cur);
 
   // ── Derived values ────────────────────────────────────────
   const uahAccounts  = accounts.filter(a => a.currency === "UAH");
