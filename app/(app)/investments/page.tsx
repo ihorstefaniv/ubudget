@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import FeatureGate from "@/components/FeatureGate";
+import { FALLBACK_RATES, rateFor } from "@/lib/nbu-rates";
 
 type Tab = "portfolio" | "stocks" | "bonds" | "realestate" | "business" | "collections";
 
@@ -14,8 +15,6 @@ interface BusinessItem { id: string; business_id: string; section: string; label
 interface Business { id: string; name: string; type: string; share: number; start_date: string; items: BusinessItem[]; employees: BusinessEmployee[]; }
 interface Collection { id: string; name: string; category: string; description: string; buy_price: number; expected_price: number; currency: string; buy_date: string; status: string; }
 
-const USD_RATE = 41.5;
-
 function fmt(n: number, cur = "UAH") {
   const v = Math.abs(n).toLocaleString("uk-UA", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   if (cur === "USD") return `$${v}`;
@@ -24,7 +23,7 @@ function fmt(n: number, cur = "UAH") {
 }
 function pct(n: number) { return `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`; }
 function monthsLeft(d: string) { const e = new Date(d), n = new Date(); return Math.max(0, (e.getFullYear() - n.getFullYear()) * 12 + e.getMonth() - n.getMonth()); }
-function toUAH(n: number, cur: string) { return n * (cur === "USD" ? USD_RATE : cur === "EUR" ? USD_RATE * 1.08 : 1); }
+function toUAH(n: number, cur: string) { return n * rateFor(FALLBACK_RATES, cur); }
 
 const Icon = ({ d, className = "w-5 h-5" }: { d: string; className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
@@ -95,8 +94,19 @@ function Toggle({ label, sub, checked, onChange }: { label: string; sub?: string
 function StockModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: () => void; edit?: Stock }) {
   const supabase = createClient();
   const [saving, setSaving] = useState(false);
+  const [accounts, setAccounts] = useState<{ id: string; name: string; currency: string }[]>([]);
+  const [accountId, setAccountId] = useState("");
   const [f, setF] = useState({ ticker: edit?.ticker ?? "", name: edit?.name ?? "", broker: edit?.broker ?? "", quantity: edit ? String(edit.quantity) : "", buy_price: edit ? String(edit.buy_price) : "", current_price: edit ? String(edit.current_price) : "", currency: edit?.currency ?? "USD", buy_date: edit?.buy_date ?? "" });
   const upd = (k: string, v: string) => setF(p => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    if (edit) return;
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: accs } = await supabase.from("accounts").select("id,name,currency").eq("user_id", data.user.id).neq("is_archived", true);
+      setAccounts(accs ?? []);
+    });
+  }, []); // eslint-disable-line
 
   const pl = f.quantity && f.buy_price && f.current_price ? +f.quantity * (+f.current_price - +f.buy_price) : 0;
   const plPct = f.buy_price && f.current_price ? (+f.current_price - +f.buy_price) / +f.buy_price * 100 : 0;
@@ -107,8 +117,19 @@ function StockModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
     const payload = { user_id: user.id, ticker: f.ticker.toUpperCase(), name: f.name, broker: f.broker, quantity: +f.quantity, buy_price: +f.buy_price, current_price: +f.current_price || +f.buy_price, currency: f.currency, buy_date: f.buy_date || null };
-    if (edit) await supabase.from("stocks").update(payload).eq("id", edit.id);
-    else await supabase.from("stocks").insert(payload);
+    if (edit) {
+      await supabase.from("stocks").update(payload).eq("id", edit.id);
+    } else {
+      await supabase.from("stocks").insert(payload);
+      if (accountId) {
+        await supabase.from("transactions").insert({
+          user_id: user.id, account_id: accountId, type: "expense",
+          category_key: "invest", amount: +f.quantity * +f.buy_price, currency: f.currency,
+          exchange_rate: 1, transaction_date: f.buy_date || new Date().toISOString().slice(0, 10),
+          note: `Купівля ${f.ticker.toUpperCase()} × ${f.quantity}`,
+        });
+      }
+    }
     setSaving(false); onSaved(); onClose();
   }
 
@@ -133,6 +154,14 @@ function StockModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: 
           <p className="text-xs text-neutral-400 mb-1">P&L прев'ю</p>
           <p className={`text-lg font-bold ${pl >= 0 ? "text-green-500" : "text-red-500"}`}>{pl >= 0 ? "+" : ""}{fmt(pl, f.currency)} · {pct(plPct)}</p>
         </div>
+      )}
+      {!edit && accounts.length > 0 && (
+        <Field label="Списати з рахунку (необов'язково)">
+          <select className={inp} value={accountId} onChange={e => setAccountId(e.target.value)}>
+            <option value="">— не списувати —</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
+          </select>
+        </Field>
       )}
       <button className={btnPrimary} onClick={save} disabled={saving}>
         {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : edit ? "Зберегти" : "Додати"}
@@ -204,10 +233,21 @@ function StocksTab({ stocks, onReload }: { stocks: Stock[]; onReload: () => void
 function BondModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: () => void; edit?: Bond }) {
   const supabase = createClient();
   const [saving, setSaving] = useState(false);
+  const [accounts, setAccounts] = useState<{ id: string; name: string; currency: string }[]>([]);
+  const [accountId, setAccountId] = useState("");
   const [type, setType] = useState(edit?.type ?? "ovdp");
   const [freeToSell, setFreeToSell] = useState(edit?.is_free_to_sell ?? true);
   const [f, setF] = useState({ name: edit?.name ?? "", issuer: edit?.issuer ?? "", isin: edit?.isin ?? "", amount: edit ? String(edit.amount) : "", interest_rate: edit ? String(edit.interest_rate) : "", currency: edit?.currency ?? "UAH", buy_date: edit?.buy_date ?? "", maturity_date: edit?.maturity_date ?? "", coupon_period: edit?.coupon_period ?? "semiannual" });
   const upd = (k: string, v: string) => setF(p => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    if (edit) return;
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: accs } = await supabase.from("accounts").select("id,name,currency").eq("user_id", data.user.id).neq("is_archived", true);
+      setAccounts(accs ?? []);
+    });
+  }, []); // eslint-disable-line
 
   const months = f.maturity_date && f.buy_date ? Math.max(0, (new Date(f.maturity_date).getFullYear() - new Date(f.buy_date).getFullYear()) * 12 + new Date(f.maturity_date).getMonth() - new Date(f.buy_date).getMonth()) : 0;
   const income = f.amount && f.interest_rate ? +f.amount * (+f.interest_rate / 100) * (months / 12) : 0;
@@ -220,8 +260,19 @@ function BondModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: (
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
     const payload = { user_id: user.id, type, name: f.name, issuer: f.issuer, isin: f.isin, amount: +f.amount, interest_rate: +f.interest_rate, currency: f.currency, buy_date: f.buy_date || null, maturity_date: f.maturity_date || null, coupon_period: f.coupon_period, is_free_to_sell: freeToSell };
-    if (edit) await supabase.from("bonds").update(payload).eq("id", edit.id);
-    else await supabase.from("bonds").insert(payload);
+    if (edit) {
+      await supabase.from("bonds").update(payload).eq("id", edit.id);
+    } else {
+      await supabase.from("bonds").insert(payload);
+      if (accountId) {
+        await supabase.from("transactions").insert({
+          user_id: user.id, account_id: accountId, type: "expense",
+          category_key: "invest", amount: +f.amount, currency: f.currency,
+          exchange_rate: 1, transaction_date: f.buy_date || new Date().toISOString().slice(0, 10),
+          note: `Купівля облігацій: ${f.name}`,
+        });
+      }
+    }
     setSaving(false); onSaved(); onClose();
   }
 
@@ -268,6 +319,14 @@ function BondModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: (
           <p className="text-xs text-green-600 font-medium">Очікуваний дохід за {months} міс.</p>
           <p className="text-xl font-bold text-green-600 mt-0.5">+{fmt(income, f.currency)}</p>
         </div>
+      )}
+      {!edit && accounts.length > 0 && (
+        <Field label="Списати з рахунку (необов'язково)">
+          <select className={inp} value={accountId} onChange={e => setAccountId(e.target.value)}>
+            <option value="">— не списувати —</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
+          </select>
+        </Field>
       )}
       <button className={btnPrimary} onClick={save} disabled={saving}>
         {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : edit ? "Зберегти" : "Додати облігацію"}

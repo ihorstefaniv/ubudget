@@ -626,11 +626,12 @@ function CreditModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved:
 }
 
 // ─── Deposit Modal ────────────────────────────────────────────
-function DepositModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: () => void; edit?: Deposit }) {
+function DepositModal({ onClose, onSaved, edit, accounts = [] }: { onClose: () => void; onSaved: () => void; edit?: Deposit; accounts?: Account[] }) {
   const supabase = createClient();
   const [saving, setSaving] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [cap, setCap] = useState(edit?.capitalization ?? true);
+  const [accountId, setAccountId] = useState("");
   const [f, setF] = useState({
     name: edit?.name ?? "", bank: edit?.bank ?? "",
     amount: edit ? String(edit.amount) : "",
@@ -675,8 +676,19 @@ function DepositModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved
       end_date: f.end_date || null, capitalization: cap,
       coupon_period: f.coupon_period, is_archived: false,
     };
-    if (edit) await supabase.from("deposits").update(payload).eq("id", edit.id);
-    else await supabase.from("deposits").insert(payload);
+    if (edit) {
+      await supabase.from("deposits").update(payload).eq("id", edit.id);
+    } else {
+      await supabase.from("deposits").insert(payload);
+      if (accountId) {
+        await supabase.from("transactions").insert({
+          user_id: user.id, account_id: accountId, type: "expense",
+          category_key: "invest", amount: +f.amount, currency: f.currency,
+          exchange_rate: 1, transaction_date: f.start_date || new Date().toISOString().slice(0, 10),
+          note: `Відкриття депозиту: ${f.name.trim()}`,
+        });
+      }
+    }
     setSaving(false); onSaved(); onClose();
   }
 
@@ -730,6 +742,16 @@ function DepositModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved
           <p className="text-xs text-green-600 dark:text-green-400 font-medium">Очікуваний дохід за {months} міс.</p>
           <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-0.5">+{fmt(preview, f.currency)}</p>
         </div>
+      )}
+
+      {!edit && accounts.length > 0 && (
+        <Field label="Списати з рахунку (необов'язково)">
+          <select value={accountId} onChange={e => setAccountId(e.target.value)}
+            className={inp}>
+            <option value="">— не списувати —</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
+          </select>
+        </Field>
       )}
 
       <Button onClick={save} loading={saving} fullWidth>
@@ -1068,7 +1090,7 @@ function DepositsTab({ deposits, accounts, onReload }: { deposits: Deposit[]; ac
         )}
       </Card>
 
-      {modal && <DepositModal onClose={() => { setModal(false); setEditItem(undefined); }} onSaved={onReload} edit={editItem} />}
+      {modal && <DepositModal onClose={() => { setModal(false); setEditItem(undefined); }} onSaved={onReload} edit={editItem} accounts={accounts} />}
       {interestDep && <DepositInterestModal deposit={interestDep} accounts={accounts} onClose={() => setInterestDep(undefined)} onSaved={onReload} />}
       {closeDep && <CloseDepositModal deposit={closeDep} accounts={accounts} onClose={() => setCloseDep(undefined)} onSaved={onReload} />}
     </div>
