@@ -187,7 +187,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <AdminRoleContext.Provider value={role}>
-      <div className="min-h-screen bg-neutral-100 overflow-x-hidden">
+      <div className="min-h-screen bg-neutral-100">
         {/* Desktop sidebar */}
         <aside className="hidden lg:flex flex-col w-56 shrink-0 fixed inset-y-0 left-0 z-30">
           <Sidebar pathname={pathname} userName={userName} role={role} ticketsCount={ticketsCount} />
@@ -203,8 +203,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Sidebar pathname={pathname} userName={userName} role={role} ticketsCount={ticketsCount} onClose={() => setMobileOpen(false)} />
         </aside>
 
-        {/* Main */}
-        <div className="lg:ml-56 flex flex-col min-h-screen">
+        {/* Main — padding-left резервує місце для sidebar */}
+        <div className="lg:pl-56 min-h-screen flex flex-col">
           <header className="lg:hidden h-12 bg-neutral-950 flex items-center justify-between px-4 shrink-0">
             <button onClick={() => setMobileOpen(true)} className="text-white/60 hover:text-white">
               <Icon d={ic.menu} cls="w-5 h-5" />
@@ -214,7 +214,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </span>
             <div className="w-5" />
           </header>
-          <main className="flex-1 p-5 lg:p-8 min-w-0">
+          <main className="flex-1 p-4 lg:p-6 overflow-x-hidden">
             {children}
           </main>
         </div>
