@@ -124,27 +124,17 @@ function PaymentModal({ credit, accounts, onClose, onSaved }: {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
-    const payAmt = +amount;
-    const newRemaining = Math.max(0, Number(credit.remaining_amount) - payAmt);
-
-    await Promise.all([
-      supabase.from("transactions").insert({
-        user_id: user.id,
-        type: "expense",
-        category_key: "other",
-        account_id: accountId,
-        amount: payAmt,
-        currency: credit.currency,
-        exchange_rate: 1,
-        transaction_date: date,
-        note: note || `Платіж: ${credit.name}`,
-      }),
-      supabase.from("credits").update({ remaining_amount: newRemaining }).eq("id", credit.id),
-    ]);
+    const { error } = await supabase.rpc("pay_credit", {
+      p_credit_id:  credit.id,
+      p_account_id: accountId,
+      p_amount:     +amount,
+      p_date:       date,
+      p_note:       note || `Платіж: ${credit.name}`,
+      p_user_id:    user.id,
+    });
 
     setSaving(false);
-    onSaved();
-    onClose();
+    if (!error) { onSaved(); onClose(); }
   }
 
   return (
