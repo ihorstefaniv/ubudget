@@ -74,7 +74,8 @@ const allNavItems: { href: string; label: string; icon: "home"|"wallet"|"bank"|"
 
 /** Підменю Інструменти */
 const toolsNav = [
-  { href: "/tools/fuel-prices",  label: "⛽ Ціни на пальне", badge: "new" },
+  { href: "/tools/exchange-rates", label: "💱 Курси валют НБУ" },
+  { href: "/tools/fuel-prices",   label: "⛽ Ціни на пальне", badge: "new" },
   { href: "/tools/deposit-calc", label: "💰 Калькулятор депозитів" },
   { href: "/tools/credit-calc",  label: "📊 Калькулятор кредитів" },
   { href: "/tools/fuel-calc",    label: "🗺 Витрати пального" },
