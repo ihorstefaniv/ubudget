@@ -93,6 +93,7 @@ export default function DashboardPage() {
   const [realEstate, setRealEstate]     = useState<RealEstate[]>([]);
   const [businessItems, setBusinessItems] = useState<BusinessItem[]>([]);
   const [collections, setCollections]   = useState<Collection[]>([]);
+  const [envelopesActive, setEnvelopesActive] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +110,7 @@ export default function DashboardPage() {
     const [
       { data: accs }, { data: txData }, { data: cr }, { data: dep }, { data: budgets },
       { data: stks }, { data: bnd }, { data: re }, { data: bi }, { data: col },
+      { data: envSettings },
     ] = await Promise.all([
       supabase.from("accounts").select("id,name,type,balance,currency,icon").eq("user_id", user.id).eq("is_archived", false).order("balance", { ascending: false }),
       supabase.from("transactions").select("id,type,amount,currency,exchange_rate,note,transaction_date,category_key")
@@ -123,6 +125,7 @@ export default function DashboardPage() {
       supabase.from("real_estate").select("id,current_price").eq("user_id", user.id),
       supabase.from("business_items").select("id,business_id,section,amount").eq("user_id", user.id),
       supabase.from("collections").select("id,expected_price,currency,status").eq("user_id", user.id),
+      supabase.from("envelope_settings").select("is_active").eq("user_id", user.id).eq("month", m).eq("year", y).maybeSingle(),
     ]);
 
     setAccounts(accs ?? []);
@@ -139,6 +142,7 @@ export default function DashboardPage() {
     setRealEstate(re ?? []);
     setBusinessItems(bi ?? []);
     setCollections(col ?? []);
+    setEnvelopesActive(envSettings?.is_active ?? false);
     setLoading(false);
   }, []);
 
@@ -174,9 +178,10 @@ export default function DashboardPage() {
   const income      = periodTxs.filter(t => t.type === "income").reduce((s, t) => s + txToUAH(t), 0);
   const expenses    = periodTxs.filter(t => t.type === "expense").reduce((s, t) => s + txToUAH(t), 0);
 
-  const monthStart = startOf("month");
-  const monthTxs   = txs.filter(t => t.transaction_date >= monthStart && t.type === "expense");
-  const budgetFact = monthTxs.reduce((s, t) => s + txToUAH(t), 0);
+  const monthStart  = startOf("month");
+  const monthTxs    = txs.filter(t => t.transaction_date >= monthStart && t.type === "expense");
+  const budgetFact  = monthTxs.reduce((s, t) => s + txToUAH(t), 0);
+  const monthIncome = txs.filter(t => t.transaction_date >= monthStart && t.type === "income").reduce((s, t) => s + txToUAH(t), 0);
 
   const catTotals: Record<string, number> = {};
   monthTxs.forEach(t => { const k = t.category_key ?? "other"; catTotals[k] = (catTotals[k] ?? 0) + Number(t.amount); });
@@ -189,13 +194,18 @@ export default function DashboardPage() {
 
   const healthScore = (() => {
     let s = 60;
-    if (income > 0 && expenses < income) s += 15;
+    if (monthIncome > 0 && budgetFact < monthIncome) s += 15;
     if (totalDebt === 0) s += 10;
-    else if (totalDebt < income * 3) s += 5;
+    else if (totalDebt < monthIncome * 3) s += 5;
     if (totalDeposit > 0) s += 5;
     if (daysNoIncome !== null && daysNoIncome > 60) s -= 15;
-    if (expenses > income && income > 0) s -= 20;
+    else if (daysNoIncome !== null && daysNoIncome > 30) s -= 5;
+    if (budgetFact > monthIncome && monthIncome > 0) s -= 20;
     if (budgetPlan > 0 && budgetFact <= budgetPlan) s += 5;
+    if (envelopesActive) s += 3;
+    const accTypes = new Set(accounts.map(a => a.type));
+    if (accTypes.size >= 3) s += 2;
+    else if (accTypes.size >= 2) s += 1;
     return Math.max(10, Math.min(100, s));
   })();
 
