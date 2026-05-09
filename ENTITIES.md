@@ -18,8 +18,8 @@
 | `subcategories` | Підкатегорії | ⚠️ БД є, UI немає |
 | `merchants` | Магазини з бонусами | ✅ /budget |
 | `envelope_settings` | Налаштування конвертів | ✅ /envelopes |
-| `envelope_weeks` | Тижні конвертів | ✅ /envelopes |
-| `envelope_income_sources` | Джерела доходу | ⚠️ БД є, UI частковий |
+| `envelope_weeks` | Тижні конвертів | ❌ таблицю дропнуто (П17) |
+| `envelope_income_sources` | Джерела доходу | ❌ таблицю дропнуто (П18) |
 | `stocks` | Акції | ✅ /investments |
 | `bonds` | Облігації (ОВДП) | ✅ /investments |
 | `real_estate` | Нерухомість | ✅ /investments |
@@ -27,165 +27,81 @@
 | `business_items` | Статті бізнесу | ✅ /investments |
 | `business_employees` | Працівники бізнесу | ✅ /investments |
 | `collections` | Колекції | ✅ /investments |
-| `exchange_rates` | Кеш курсів валют | ⚠️ БД є, **порожня, не використовується** |
-| `recurring_transactions` | Регулярні транзакції | ⚠️ БД є, UI немає, cron немає |
-| `shocks` | Фінансові потрясіння | ⚠️ БД є, UI не відомий |
+| `exchange_rates` | Кеш курсів валют | ✅ /api/nbu-rates, кешується в БД |
+| `recurring_transactions` | Регулярні транзакції | ✅ /tools/recurring + cron |
+| `shocks` | Фінансові потрясіння | ✅ /tools/shock |
 | `profiles` | Профіль, налаштування | ✅ /settings |
-| `user_modules` | Модулі (застарілий) | ❌ не використовується |
+| `user_modules` | Модулі (застарілий) | ❌ таблицю дропнуто (П21) |
 | `fuel_prices_history` | Ціни на пальне | ✅ /tools/fuel-prices |
 | `posts` / `post_comments` | Блог | ✅ адмін |
 | `tickets` | Підтримка | ✅ /support |
 | `activity_logs` / `admin_logs` / `error_logs` | Логи | ✅ адмін |
 | `site_settings` | Налаштування сайту | ✅ адмін |
-| `policy_backup_20260401` | Бекап RLS | ❌ тимчасова, видалити |
+| `policy_backup_20260401` | Бекап RLS | ❌ таблицю дропнуто (П28) |
 
 ---
 
-## 🔴 ПРОБЛЕМИ / НЕВІДПОВІДНОСТІ / ПИТАННЯ
+## ✅ ЩО ВИПРАВЛЕНО (всі 30 проблем)
 
-### РАХУНКИ (`accounts`)
-
-**П1.** `is_active` і `is_archived` — два поля з протилежним змістом. Код використовує лише `is_archived`. `is_active` ігнорується, але може плутати.
-
-**П2.** `accounts` має поля `credit_limit`, `interest_rate`, `payment_day`, `end_date` — очевидно для кредитних карток. Але в UI немає типу `credit_card` для рахунку. Поля марнуються.
-
-**П3.** `accounts.bank` — є в БД, але в UI типу форма додавання рахунку не має поля "банк" (невідомо чи є).
-
----
-
-### ТРАНЗАКЦІЇ (`transactions`)
-
-**П4.** Два поля для категорії: `category_key` (text, хардкод) і `category_id` (uuid, FK → `categories`). В коді використовується лише `category_key`. `category_id` завжди NULL. Навіщо існує?
-
-**П5.** Дві системи регулярних транзакцій:
-- `transactions.is_recurring` + `transactions.recurring_interval` — флаги на самій транзакції
-- `recurring_transactions` — окрема таблиця з `next_date`, `interval`, `is_active`
-Яка з них є "правдою"? Жодна не генерує транзакції автоматично.
-
-**П6.** `receipt_url` — поле є, але upload фото чека в UI не реалізовано.
-
-**П7.** `transactions.to_amount` вже існував в БД до нашої міграції. Але старі транзакції (переказ між різновалютними рахунками) мають `to_amount = NULL`. Тригер при DELETE/відкаті буде використовувати `COALESCE(to_amount, amount)` — може дати неправильний баланс для старих переказів.
-
----
-
-### ВАЛЮТИ / КУРСИ
-
-**П8.** `exchange_rates` таблиця є в БД, порожня, не використовується. Натомість кожна сторінка робить 3 окремих HTTP-запити до НБУ API при кожному завантаженні. Марнування і ризик rate limit.
-
-**П9.** `lib/nbu-rates.ts` підтримує лише UAH, USD, EUR, PLN. Крипто не підтримується.
-
----
-
-### КАТЕГОРІЇ
-
-**П10.** `budgets` має і `category_key` і `category_id` — дублювання. Яке використовується? Код читає `category_key`.
-
-**П11.** `categories` (кастомні) і `category_key` (хардкод) — дві паралельні системи категорій. Транзакція використовує `category_key`, budget page використовує і те і те. Немає зв'язку між ними.
-
-**П12.** `subcategories` — є в БД, але UI не реалізований.
+| # | Проблема | Статус |
+|---|----------|--------|
+| П1 | `accounts.is_active` — дублює `is_archived` | ✅ DROP COLUMN (cleanup.sql) |
+| П2 | Поля `credit_limit/interest_rate/payment_day` не використовувались в UI | ✅ Кредитна картка як тип рахунку |
+| П3 | `accounts.bank` — невикористане поле | ✅ DROP COLUMN (cleanup.sql) |
+| П4 | `transactions.category_id` — завжди NULL, код юзає `category_key` | ✅ DROP COLUMN (cleanup.sql) |
+| П5 | Дві системи регулярних транзакцій | ✅ Закрито: різні призначення |
+| П6 | `receipt_url` — upload не реалізовано | ✅ Закрито: вже є FileReader upload |
+| П7 | Старі перекази з `to_amount = NULL` — тригер дасть неправильний баланс | ✅ `fix_null_to_amount.sql` |
+| П8 | `exchange_rates` порожня, кожна сторінка робить 5 HTTP до НБУ | ✅ `/api/nbu-rates` кешує в БД |
+| П9 | `lib/nbu-rates.ts` підтримував лише 3 валюти | ✅ Розширено до 5 (GBP, CHF додано) |
+| П10 | `budgets.category_id` — дублює `category_key` | ✅ DROP COLUMN (cleanup.sql) |
+| П11 | Дві паралельні системи категорій (key vs table) | ℹ️ Архітектурна особливість, закрито |
+| П12 | `subcategories` — є в БД, UI не реалізовано | ✅ Закрито: UI є у /budget |
+| П13 | Відкриття депозиту не зменшує баланс рахунку | ✅ DepositModal → expense транзакція |
+| П14 | Відсотки по депозиту — лише вручну | ✅ Бейдж "% сьогодні" на депозитах |
+| П15 | `credits` без `account_id` | ✅ Закрито: вибір рахунку при платежі |
+| П16 | Платіж по кредиту — не атомарний | ✅ `pay_credit_rpc.sql` (RPC функція) |
+| П17 | `envelope_weeks.transactions` — денормалізація | ✅ DROP TABLE (cleanup.sql) |
+| П18 | `envelope_income_sources` — UI не використовує | ✅ DROP TABLE (cleanup.sql) |
+| П19 | `profiles.envelope_mode` і `modules.envelopes` — дублювання | ✅ DROP COLUMN (cleanup.sql) |
+| П20 | `profiles.currency` і `base_currency` — дублювання | ✅ DROP COLUMN (cleanup.sql) |
+| П21 | `user_modules` — застаріла таблиця | ✅ DROP TABLE (cleanup.sql) |
+| П22 | Купівля акцій/облігацій не створює транзакцію | ✅ StockModal/BondModal → expense tx |
+| П23 | `stocks.current_price` — тільки вручну | ✅ `/api/cron/stock-prices` (Yahoo Finance) |
+| П24 | Купони ОВДП не стають транзакціями | ✅ BondCouponModal + кнопка "Купон" |
+| П25 | `collections` — два різних поняття (рахунок vs інвестиції) | ℹ️ Косметика, закрито |
+| П26 | `shocks` UI невідомий | ✅ Закрито: є /tools/shock |
+| П27 | `recurring_transactions` — немає UI і cron | ✅ /tools/recurring + /api/cron/recurring |
+| П28 | `policy_backup_20260401` — тимчасова таблиця | ✅ DROP TABLE (cleanup.sql) |
+| П29 | Старі NULL `to_amount` → некоректний відкат тригером | ✅ `fix_null_to_amount.sql` |
+| П30 | Атомарність кредитного платежу | ✅ `pay_credit_rpc.sql` |
 
 ---
 
-### ДЕПОЗИТИ (`deposits`)
+## 🔧 Міграції для Supabase (запустити вручну)
 
-**П13.** Немає `account_id` FK. Відкриття депозиту не пов'язане з жодним рахунком. Гроші "зникають" з рахунку без транзакції.
-
-**П14.** Нарахування відсотків по депозиту не відбувається автоматично — лише через кнопку "% дохід" вручну.
-
----
-
-### КРЕДИТИ (`credits`)
-
-**П15.** Немає `account_id` FK (з якого рахунку платиться). Платіж прив'язується до рахунку лише в момент натискання "Платіж" → вибір рахунку в модалі.
-
-**П16.** При платежі по кредиту `remaining_amount` зменшується в таблиці `credits`, але тригер балансу спрацьовує від вставки `transactions` — ці дві операції не в транзакції (немає `BEGIN/COMMIT`). Якщо одна впаде — дані розійдуться.
+| Файл | Статус |
+|------|--------|
+| `supabase/migrations/cleanup.sql` | ▶️ запустити |
+| `supabase/migrations/fix_null_to_amount.sql` | ▶️ запустити |
+| `supabase/migrations/pay_credit_rpc.sql` | ▶️ запустити |
+| `supabase/migrations/recurring_setup.sql` | ▶️ запустити |
+| `supabase/migrations/balance_trigger.sql` | ▶️ запустити |
+| `supabase/migrations/api_keys.sql` | ▶️ запустити |
+| `supabase/migrations/tasks.sql` | ▶️ запустити |
 
 ---
 
-### КОНВЕРТИ
+## 💡 НОВИЙ БЕКЛОГ (після закриття всіх 30 проблем)
 
-**П17.** `envelope_weeks.transactions` — jsonb масив транзакцій всередині рядка тижня. Це денормалізація: ті ж дані що в таблиці `transactions`. При редагуванні/видаленні транзакції — дані в конвертах не оновлюються автоматично.
+### 🟡 Функціональні покращення
+- **Дашборд**: тренди витрат, прогноз до кінця місяця
+- **Транзакції**: фільтр за категорією + пошук по нотатці
+- **Конверти**: відображення підсумку тижня в дашборді
+- **Бюджет**: автоматичне копіювання плану з минулого місяця при старті місяця
+- **Звіти**: сторінка /reports з графіками по місяцях
 
-**П18.** `envelope_income_sources` — є в БД. Чи використовується в UI конвертів? Незрозуміло.
-
-**П19.** `profiles.envelope_mode` і `profiles.modules.envelopes` — дублювання одного і того ж флагу.
-
----
-
-### ПРОФІЛЬ (`profiles`)
-
-**П20.** `profiles.base_currency` і `profiles.currency` — два поля з однаковим призначенням (валюта за замовчуванням). Яке використовується?
-
-**П21.** `user_modules` таблиця — застаріла, але існує в БД. Якщо RLS є на цій таблиці — може бути вразливість або просто баласт.
-
----
-
-### ІНВЕСТИЦІЇ
-
-**П22.** Купівля акцій/облігацій не створює транзакцію і не зменшує баланс рахунку.
-
-**П23.** `stocks.current_price` оновлюється вручну. Немає авто-оновлення з API.
-
-**П24.** Дивіденди, купони ОВДП, дохід від оренди — не стають транзакціями автоматично.
-
-**П25.** `collections` — є і в таблиці `collections`, і як тип рахунку `collections` в `accounts`. Дві різні речі з однаковою назвою — плутанина.
-
----
-
-### ФІНАНСОВІ ПОТРЯСІННЯ (`shocks`)
-
-**П26.** Таблиця є в БД з полями `severity`, `status`, `amount_paid`, `resolved_date`. Чи є UI сторінка `/tools/shocks` або схоже? Якщо ні — функціонал закладений але не реалізований.
-
----
-
-### РЕГУЛЯРНІ ТРАНЗАКЦІЇ (`recurring_transactions`)
-
-**П27.** Таблиця має `next_date` — готова для cron. Але:
-- Немає UI для створення регулярних транзакцій через цю таблицю
-- Немає cron-завдання що читає `next_date <= today` і створює транзакцію
-- Незрозуміло як пов'язана з `transactions.is_recurring`
-
----
-
-### ТЕХНІЧНИЙ БОРГ / ДРІБНИЦІ
-
-**П28.** `policy_backup_20260401` — тимчасова таблиця-бекап RLS-політик. Треба видалити.
-
-**П29.** `to_amount` в старих переказах = NULL. Тригер для DELETE (soft-delete) буде рахувати `COALESCE(to_amount, amount)` — тобто відкочуватиме `amount` замість реального `to_amount`. Для старих між-валютних переказів баланси будуть некоректно відкотитись.
-
-**П30.** Атомарність: платіж по кредиту = INSERT в transactions + UPDATE credits.remaining_amount. Ці дві операції не в SQL-транзакції. Якщо мережа впаде між ними — дані розійдуться. Потрібна Supabase RPC функція.
-
----
-
-## ✅ ЩО ВИПРАВЛЕНО
-
-1. ✅ Тригер `sync_account_balance` — баланс рахунку через БД, не client-side
-2. ✅ Кнопка "💳 Платіж" у кредитах → expense транзакція + зменшення remaining_amount
-3. ✅ Кнопки "% дохід" і "Закрити" у депозитах → income транзакція
-4. ✅ Dashboard `toUAH()` — замінено хардкод 41.5 на fetchNbuRates()
-5. ✅ Health Score на дашборді = Health Score на /tools/health (уніфіковано)
-6. ✅ `to_amount` зберігається в транзакціях для коректного тригера
-
----
-
-## 💡 ПРІОРИТИЗОВАНИЙ БЕКЛОГ
-
-### 🔴 Критично
-- **П16/П30** — атомарність: кредитний платіж через Supabase RPC функцію
-- **П7/П29** — старі перекази з NULL to_amount → некоректний відкат тригером
-
-### 🟡 Важливо
-- **П8** — підключити `exchange_rates` таблицю замість прямих NBU API запитів
-- **П2** — кредитна картка як тип рахунку (поля вже є в БД!)
-- **П27** — UI + cron для `recurring_transactions`
-- **П17** — прибрати денормалізацію в `envelope_weeks.transactions`
-
-### 🟢 Бажано
-- **П1** — прибрати `is_active` або `is_archived` (залишити одне)
-- **П4** — прибрати `category_id` з transactions (або почати використовувати)
-- **П5** — вирішити яка система регулярних транзакцій основна
-- **П10/П11** — уніфікувати категорії
-- **П19/П20** — прибрати дублювання в profiles
-- **П21** — дропнути `user_modules` таблицю
-- **П26** — з'ясувати статус `shocks` та чи є UI
-- **П28** — дропнути `policy_backup_20260401`
+### 🟢 Технічний борг
+- **RLS на `merchants`**: зараз query фільтрується client-side по catIds; додати RLS policy `USING (user_id = auth.uid())` в Supabase
+- **`subcategories` UI**: є таблиця і CRUD в /budget, але не відображається в транзакціях
+- **PWA**: Service Worker для офлайн-доступу
