@@ -28,3 +28,11 @@ ALTER TABLE accounts DROP COLUMN IF EXISTS bank;
 
 -- П10: Видалення budgets.category_id (код використовує category_key, не FK)
 ALTER TABLE budgets DROP COLUMN IF EXISTS category_id;
+
+-- merchants.user_id: заповнити NULL-значення через JOIN з categories
+-- (preset-заклади вставлялись без user_id — тепер успадковують від categories.user_id)
+UPDATE merchants m
+SET user_id = c.user_id
+FROM categories c
+WHERE m.category_id = c.id
+  AND m.user_id IS NULL;

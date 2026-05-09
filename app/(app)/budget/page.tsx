@@ -537,7 +537,7 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
       if (cat && txKey && MERCHANT_PRESETS[txKey]) {
         await supabase.from("merchants").insert(
           MERCHANT_PRESETS[txKey].map(m => ({
-            category_id: cat.id, name: m.name,
+            user_id: user.id, category_id: cat.id, name: m.name,
             has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
             bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
           }))
@@ -797,7 +797,8 @@ export default function BudgetPage() {
     const prevDateEnd   = prevMonth === 12 ? `${prevYear+1}-01-01` : `${prevYear}-${String(prevMonth+1).padStart(2,"0")}-01`;
 
     const [
-      { data: cats }, { data: subs }, { data: merch },
+      { data: cats },
+      { data: subs },
       { data: budgets },
       { data: txs }, { data: txsPrev },
       { data: creditRows },
@@ -806,7 +807,6 @@ export default function BudgetPage() {
     ] = await Promise.all([
       supabase.from("categories").select("*").eq("user_id", user.id).order("sort_order"),
       supabase.from("subcategories").select("*").eq("user_id", user.id),
-      supabase.from("merchants").select("*"),
       supabase.from("budgets").select("category_key, plan_amount")
         .eq("user_id", user.id).eq("month", month).eq("year", year),
       supabase.from("transactions").select("amount,category_key,type")
@@ -823,6 +823,12 @@ export default function BudgetPage() {
       supabase.from("envelope_settings").select("mandatory")
         .eq("user_id", user.id).eq("month", month).eq("year", year).single(),
     ]);
+
+    // Merchants — фільтруємо server-side лише по категоріях цього юзера
+    const catIds = (cats ?? []).map(c => c.id);
+    const { data: merch } = catIds.length > 0
+      ? await supabase.from("merchants").select("*").in("category_id", catIds)
+      : { data: [] as typeof cats };
 
     // factMap: category_key → sum (тільки expense+income; transfer ігнорується)
     const factMap: Record<string, number>     = {};
@@ -992,7 +998,7 @@ export default function BudgetPage() {
       if (toInsert.length > 0) {
         await supabase.from("merchants").insert(
           toInsert.map(m => ({
-            category_id: catId, name: m.name,
+            user_id: user.id, category_id: catId, name: m.name,
             has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
             bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
           }))
