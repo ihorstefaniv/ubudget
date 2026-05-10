@@ -66,6 +66,7 @@ const allNavItems: { href: string; label: string; icon: "home"|"wallet"|"bank"|"
   { href: "/transactions", label: "Транзакції",         icon: "wallet",     moduleKey: null },
   { href: "/accounts",     label: "Рахунки",            icon: "bank",       moduleKey: null },
   { href: "/budget",       label: "Бюджет",             icon: "chart",      moduleKey: "budget" },
+  { href: "/reports",      label: "Звіти",              icon: "trendUp",    moduleKey: null },
   { href: "/credits",      label: "Кредити & Депозити", icon: "creditCard", moduleKey: "credits" },
   { href: "/investments",  label: "Інвестиції",         icon: "trendUp",    moduleKey: "investments" },
   { href: "/envelopes",    label: "Конверти",           icon: "envelope",   moduleKey: "envelopes" },

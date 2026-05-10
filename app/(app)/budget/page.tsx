@@ -1059,6 +1059,20 @@ export default function BudgetPage() {
         </div>
       ) : (
         <>
+          {tab === "budget" && Object.keys(planMap).length === 0 && (
+            <div className="flex items-center gap-4 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-2xl p-4">
+              <span className="text-2xl shrink-0">📋</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">Бюджет на цей місяць не налаштовано</p>
+                <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">Скопіюйте план з минулого місяця або введіть суми вручну</p>
+              </div>
+              <button onClick={copyPlan}
+                className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-all">
+                <Icon d={extraIcons.copy} className="w-3.5 h-3.5" />
+                Скопіювати з минулого
+              </button>
+            </div>
+          )}
           {tab === "budget" && (
             <BudgetTab
               factMap={factMap} prevFactMap={prevFactMap}

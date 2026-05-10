@@ -498,6 +498,7 @@ export default function TransactionsPage() {
   const [search, setSearch]       = useState("");
   const [filterType, setFilterType]       = useState<TxType | "all">("all");
   const [filterAccount, setFilterAccount] = useState("all");
+  const [filterCategory, setFilterCategory] = useState("all");
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -647,6 +648,7 @@ export default function TransactionsPage() {
   const filtered = txs.filter(tx => {
     if (filterType !== "all" && tx.type !== filterType) return false;
     if (filterAccount !== "all" && tx.account_id !== filterAccount) return false;
+    if (filterCategory !== "all" && tx.category_key !== filterCategory) return false;
     if (search) {
       const q   = search.toLowerCase();
       const cat = getCat(tx.type, tx.category_key);
@@ -748,7 +750,7 @@ export default function TransactionsPage() {
         <div className="flex gap-2 flex-wrap items-center">
           <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-xl">
             {(["all", "expense", "income", "transfer"] as const).map(t => (
-              <button key={t} onClick={() => setFilterType(t)}
+              <button key={t} onClick={() => { setFilterType(t); setFilterCategory("all"); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
                   filterType === t
                     ? "bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 shadow-sm"
@@ -763,6 +765,15 @@ export default function TransactionsPage() {
               className="px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 focus:outline-none focus:border-orange-300 transition-all">
               <option value="all">Всі рахунки</option>
               {accounts.filter(a => !a.is_archived).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          )}
+          {(filterType === "expense" || filterType === "income") && (
+            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+              className="px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 focus:outline-none focus:border-orange-300 transition-all">
+              <option value="all">Всі категорії</option>
+              {(filterType === "expense" ? CATEGORIES.expense : CATEGORIES.income).map(c => (
+                <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
+              ))}
             </select>
           )}
         </div>

@@ -185,6 +185,21 @@ export default function DashboardPage() {
   const budgetFact  = monthTxs.reduce((s, t) => s + txToUAH(t), 0);
   const monthIncome = txs.filter(t => t.transaction_date >= monthStart && t.type === "income").reduce((s, t) => s + txToUAH(t), 0);
 
+  const now = new Date();
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
+  const prevMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
+  const prevMonthTxs   = txs.filter(t => t.transaction_date >= prevMonthStart && t.transaction_date <= prevMonthEnd);
+  const prevIncome     = prevMonthTxs.filter(t => t.type === "income").reduce((s, t) => s + txToUAH(t), 0);
+  const prevExpenses   = prevMonthTxs.filter(t => t.type === "expense").reduce((s, t) => s + txToUAH(t), 0);
+
+  function trend(curr: number, prev: number) {
+    if (!prev) return null;
+    const pct = Math.round((curr - prev) / prev * 100);
+    return { pct, up: curr >= prev };
+  }
+  const incomeTrend  = trend(monthIncome, prevIncome);
+  const expenseTrend = trend(budgetFact, prevExpenses);
+
   const catTotals: Record<string, number> = {};
   monthTxs.forEach(t => { const k = t.category_key ?? "other"; catTotals[k] = (catTotals[k] ?? 0) + Number(t.amount); });
   const topCatEntry = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
@@ -373,10 +388,20 @@ export default function DashboardPage() {
           <div className="text-center p-4 rounded-xl bg-green-50 dark:bg-green-950/20">
             <p className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">Доходи</p>
             <p className="text-xl font-bold text-green-600 dark:text-green-400">{fmt(income)}</p>
+            {period === "month" && incomeTrend && (
+              <p className={`text-[10px] font-semibold mt-1 ${incomeTrend.up ? "text-green-500" : "text-red-500"}`}>
+                {incomeTrend.up ? "↑" : "↓"} {Math.abs(incomeTrend.pct)}% vs минулий місяць
+              </p>
+            )}
           </div>
           <div className="text-center p-4 rounded-xl bg-red-50 dark:bg-red-950/20">
             <p className="text-xs text-red-500 dark:text-red-400 font-medium mb-1">Витрати</p>
             <p className="text-xl font-bold text-red-500 dark:text-red-400">{fmt(expenses)}</p>
+            {period === "month" && expenseTrend && (
+              <p className={`text-[10px] font-semibold mt-1 ${expenseTrend.up ? "text-red-500" : "text-green-500"}`}>
+                {expenseTrend.up ? "↑" : "↓"} {Math.abs(expenseTrend.pct)}% vs минулий місяць
+              </p>
+            )}
           </div>
           <div className="text-center p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50">
             <p className="text-xs text-neutral-500 font-medium mb-1">Різниця</p>
