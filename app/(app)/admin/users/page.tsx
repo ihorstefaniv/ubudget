@@ -342,7 +342,7 @@ export default function AdminUsersPage() {
 
   return (
     <>
-      <div className="space-y-5">
+      <div className="space-y-5 max-w-5xl">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
@@ -422,6 +422,7 @@ export default function AdminUsersPage() {
               </button>
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-100">
@@ -466,6 +467,7 @@ export default function AdminUsersPage() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

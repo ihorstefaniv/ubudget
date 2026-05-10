@@ -242,7 +242,7 @@ export default function AdminTicketsPage() {
 
   return (
     <>
-      <div className="space-y-5">
+      <div className="space-y-5 max-w-5xl">
         <div>
           <h1 className="text-xl font-bold text-neutral-900 dark:text-neutral-100">Тикети</h1>
           <p className="text-sm text-neutral-400 mt-0.5">
@@ -281,6 +281,7 @@ export default function AdminTicketsPage() {
               <p className="text-sm">Тут поки порожньо</p>
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-100 dark:border-neutral-800">
@@ -323,6 +324,7 @@ export default function AdminTicketsPage() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

@@ -345,10 +345,10 @@ export default function AdminDashboardPage() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 max-w-5xl">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Дашборд</h1>
           <p className="text-sm text-neutral-400 mt-0.5">

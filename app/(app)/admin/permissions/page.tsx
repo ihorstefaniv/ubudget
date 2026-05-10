@@ -140,7 +140,7 @@ export default function PermissionsPage() {
   );
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5 max-w-5xl">
 
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">

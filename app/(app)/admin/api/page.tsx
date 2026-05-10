@@ -235,9 +235,9 @@ export default function ApiPage() {
   const monthlyRevenue = proCount * 5 + businessCount * 20;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 max-w-5xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">API</h1>
           <p className="text-sm text-neutral-500 mt-0.5">Управління ендпоінтами, ключами доступу та монетизацією</p>

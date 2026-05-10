@@ -431,9 +431,9 @@ export default function TasksPage() {
   const bugs    = tasks.filter(t => t.type === "bug" && t.status !== "done").length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Завдання</h1>
           <p className="text-sm text-neutral-500 mt-0.5">Внутрішній таск-менеджер UBudget</p>
@@ -448,7 +448,7 @@ export default function TasksPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "Всього",      value: total,  color: "text-neutral-900" },
           { label: "В роботі",   value: inWork,  color: "text-orange-600"  },
