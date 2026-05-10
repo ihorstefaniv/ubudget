@@ -19,6 +19,7 @@ interface Transaction {
   to_account_id: string | null; // для переказів
   to_amount?: number | null;    // сума яку отримує to_account (може відрізнятись при різних валютах)
   category_key: string;
+  subcategory_id: string | null;
   account_id: string | null;
   transaction_date: string;
   note: string;
@@ -28,6 +29,7 @@ interface Transaction {
 }
 
 interface Account { id: string; name: string; currency: string; icon?: string; is_archived?: boolean; }
+interface Subcategory { id: string; name: string; icon: string; category_id: string; parent_name?: string; }
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -55,11 +57,12 @@ const DEFAULT_RATES: Record<string, number> = NBU_FALLBACK;
 
 // ─── Add/Edit Modal ───────────────────────────────────────────
 
-function AddModal({ onClose, onSave, editTx, accounts }: {
+function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
   onClose: () => void;
   onSave: (tx: Omit<Transaction, "id">) => Promise<void>;
   editTx?: Transaction;
   accounts: Account[];
+  subcategories: Subcategory[];
 }) {
   const firstAcc = accounts[0];
 
@@ -68,6 +71,7 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
   const [currency, setCurrency]   = useState(editTx?.currency ?? firstAcc?.currency ?? "UAH");
   const [exchangeRate, setExchangeRate] = useState(editTx?.exchange_rate ?? 1);
   const [category, setCategory]   = useState(editTx?.category_key ?? "");
+  const [subcategoryId, setSubcategoryId] = useState(editTx?.subcategory_id ?? "");
   const [accountId, setAccountId] = useState(editTx?.account_id ?? firstAcc?.id ?? "");
   const [toAccountId, setToAccountId] = useState<string>(
     editTx?.to_account_id ?? accounts.find(a => a.id !== (editTx?.account_id ?? firstAcc?.id))?.id ?? ""
@@ -157,6 +161,7 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
         exchange_rate: exchangeRate,
         to_account_id: type === "transfer" ? toAccountId : null,
         category_key: type === "transfer" ? "transfer" : category,
+        subcategory_id: type !== "transfer" && subcategoryId ? subcategoryId : null,
         account_id: accountId || null,
         transaction_date: date,
         note,
@@ -200,7 +205,7 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
           {/* Тип */}
           <div className="grid grid-cols-3 gap-1.5 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-xl">
             {(["expense", "income", "transfer"] as TxType[]).map(t => (
-              <button key={t} onClick={() => { setType(t); setCategory(""); }}
+              <button key={t} onClick={() => { setType(t); setCategory(""); setSubcategoryId(""); }}
                 className={`py-2 rounded-lg text-sm font-medium transition-all ${
                   type === t
                     ? t === "expense" ? "bg-white dark:bg-neutral-900 text-red-500 shadow-sm"
@@ -275,7 +280,7 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
               <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Категорія *</label>
               <div className="grid grid-cols-4 gap-2">
                 {cats.map(c => (
-                  <button key={c.id} onClick={() => setCategory(c.id)}
+                  <button key={c.id} onClick={() => { setCategory(c.id); setSubcategoryId(""); }}
                     className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border transition-all ${
                       category === c.id
                         ? "border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30"
@@ -288,6 +293,24 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Підкатегорія */}
+          {type !== "transfer" && subcategories.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                Підкатегорія <span className="text-neutral-400 font-normal">(опційно)</span>
+              </label>
+              <select value={subcategoryId} onChange={e => setSubcategoryId(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
+                <option value="">— не вказано —</option>
+                {subcategories.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.icon} {s.name}{s.parent_name ? ` (${s.parent_name})` : ""}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 
@@ -412,15 +435,17 @@ function AddModal({ onClose, onSave, editTx, accounts }: {
 
 // ─── Transaction Row ──────────────────────────────────────────
 
-function TxRow({ tx, accounts, onEdit, onDelete }: {
+function TxRow({ tx, accounts, subcategories, onEdit, onDelete }: {
   tx: Transaction;
   accounts: Account[];
+  subcategories: Subcategory[];
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const cat        = getCat(tx.type, tx.category_key);
   const isExpense  = tx.type === "expense";
   const isTransfer = tx.type === "transfer";
+  const subcat     = tx.subcategory_id ? subcategories.find(s => s.id === tx.subcategory_id) : null;
 
   const fromAccount = accounts.find(a => a.id === tx.account_id);
   const toAccount   = accounts.find(a => a.id === tx.to_account_id);
@@ -463,6 +488,7 @@ function TxRow({ tx, accounts, onEdit, onDelete }: {
         </div>
         <p className="text-xs text-neutral-400 mt-0.5 truncate">
           {accountLabel}{accountLabel && cat.label ? " · " : ""}{isTransfer ? "" : cat.label}
+          {subcat ? ` › ${subcat.icon} ${subcat.name}` : ""}
         </p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -492,6 +518,7 @@ export default function TransactionsPage() {
 
   const [txs, setTxs]             = useState<Transaction[]>([]);
   const [accounts, setAccounts]   = useState<Account[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTx, setEditTx]       = useState<Transaction | undefined>();
@@ -523,10 +550,10 @@ export default function TransactionsPage() {
       const start = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, "0")}-01`;
       const end   = new Date(viewMonth.year, viewMonth.month + 1, 0).toISOString().slice(0, 10);
 
-      const [{ data: txData }, { data: accsData }] = await Promise.all([
+      const [{ data: txData }, { data: accsData }, { data: subcatData }] = await Promise.all([
         supabase
           .from("transactions")
-          .select("id, type, amount, currency, exchange_rate, to_account_id, category_key, account_id, transaction_date, note, receipt_url, is_recurring, recurring_interval")
+          .select("id, type, amount, currency, exchange_rate, to_account_id, category_key, subcategory_id, account_id, transaction_date, note, receipt_url, is_recurring, recurring_interval")
           .eq("user_id", user.id)
           .is("deleted_at", null)
           .gte("transaction_date", start)
@@ -538,6 +565,11 @@ export default function TransactionsPage() {
           .select("id, name, currency, icon, is_archived")
           .eq("user_id", user.id)
           .order("name"),
+        supabase
+          .from("subcategories")
+          .select("id, name, icon, category_id, categories(name)")
+          .eq("user_id", user.id)
+          .order("sort_order"),
       ]);
 
       setTxs((txData ?? []).map(row => ({
@@ -548,6 +580,7 @@ export default function TransactionsPage() {
         exchange_rate:    Number(row.exchange_rate ?? 1),
         to_account_id:    row.to_account_id ?? null,
         category_key:     row.category_key ?? "other",
+        subcategory_id:   row.subcategory_id ?? null,
         account_id:       row.account_id ?? null,
         transaction_date: row.transaction_date ?? new Date().toISOString().slice(0, 10),
         note:             row.note ?? "",
@@ -557,6 +590,10 @@ export default function TransactionsPage() {
       })));
 
       setAccounts(accsData ?? []);
+      setSubcategories((subcatData ?? []).map((s: { id: string; name: string; icon: string; category_id: string; categories: { name: string }[] | null }) => ({
+        id: s.id, name: s.name, icon: s.icon, category_id: s.category_id,
+        parent_name: Array.isArray(s.categories) ? s.categories[0]?.name : (s.categories as { name: string } | null)?.name,
+      })));
     } catch {
       // якщо запит впав — показуємо порожній список, а не вічний спінер
     }
@@ -596,6 +633,7 @@ export default function TransactionsPage() {
           to_account_id:      data.to_account_id,
           to_amount:          toAmount,
           category_key:       data.category_key,
+          subcategory_id:     data.subcategory_id,
           account_id:         data.account_id,
           transaction_date:   data.transaction_date,
           note:               data.note || null,
@@ -620,6 +658,7 @@ export default function TransactionsPage() {
           to_account_id:      data.to_account_id,
           to_amount:          toAmount,
           category_key:       data.category_key,
+          subcategory_id:     data.subcategory_id,
           account_id:         data.account_id,
           transaction_date:   data.transaction_date,
           note:               data.note || null,
@@ -814,7 +853,7 @@ export default function TransactionsPage() {
                 </div>
                 <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
                   {dayTxs.map(tx => (
-                    <TxRow key={tx.id} tx={tx} accounts={accounts}
+                    <TxRow key={tx.id} tx={tx} accounts={accounts} subcategories={subcategories}
                       onEdit={() => { setEditTx(tx); setShowModal(true); }}
                       onDelete={() => deleteTx(tx.id)}
                     />
@@ -832,6 +871,7 @@ export default function TransactionsPage() {
           onSave={handleSave}
           editTx={editTx}
           accounts={accounts.filter(a => !a.is_archived)}
+          subcategories={subcategories}
         />
       )}
     </div>
