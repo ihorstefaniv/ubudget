@@ -498,6 +498,20 @@ export default function TransactionsPage() {
   const [search, setSearch]       = useState("");
   const [filterType, setFilterType]       = useState<TxType | "all">("all");
   const [filterAccount, setFilterAccount] = useState("all");
+  const [viewMonth, setViewMonth] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+
+  const monthStart = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, "0")}-01`;
+  const monthEnd   = new Date(viewMonth.year, viewMonth.month + 1, 0).toISOString().slice(0, 10);
+
+  function prevMonth() {
+    setViewMonth(v => v.month === 0 ? { year: v.year - 1, month: 11 } : { year: v.year, month: v.month - 1 });
+  }
+  function nextMonth() {
+    setViewMonth(v => v.month === 11 ? { year: v.year + 1, month: 0 } : { year: v.year, month: v.month + 1 });
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -505,15 +519,19 @@ export default function TransactionsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
 
+      const start = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, "0")}-01`;
+      const end   = new Date(viewMonth.year, viewMonth.month + 1, 0).toISOString().slice(0, 10);
+
       const [{ data: txData }, { data: accsData }] = await Promise.all([
         supabase
           .from("transactions")
           .select("id, type, amount, currency, exchange_rate, to_account_id, category_key, account_id, transaction_date, note, receipt_url, is_recurring, recurring_interval")
           .eq("user_id", user.id)
           .is("deleted_at", null)
+          .gte("transaction_date", start)
+          .lte("transaction_date", end)
           .order("transaction_date", { ascending: false })
-          .order("created_at", { ascending: false })
-          .limit(500),
+          .order("created_at", { ascending: false }),
         supabase
           .from("accounts")
           .select("id, name, currency, icon, is_archived")
@@ -542,7 +560,7 @@ export default function TransactionsPage() {
       // якщо запит впав — показуємо порожній список, а не вічний спінер
     }
     setLoading(false);
-  }, []);
+  }, [viewMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -670,7 +688,7 @@ export default function TransactionsPage() {
   return (
     <div className="space-y-5 pb-8 max-w-4xl">
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Транзакції</h1>
           <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">Всі доходи та витрати</p>
@@ -678,6 +696,24 @@ export default function TransactionsPage() {
         <Button icon={icons.plus} onClick={() => { setEditTx(undefined); setShowModal(true); }}>
           Додати
         </Button>
+      </div>
+
+      {/* Month navigation */}
+      <div className="flex items-center justify-between bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 px-4 py-3">
+        <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500 transition-colors">
+          <Icon d={icons.chevLeft} className="w-4 h-4" />
+        </button>
+        <div className="text-center">
+          <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 capitalize">
+            {new Date(viewMonth.year, viewMonth.month).toLocaleDateString("uk-UA", { month: "long", year: "numeric" })}
+          </p>
+          {viewMonth.year === new Date().getFullYear() && viewMonth.month === new Date().getMonth() && (
+            <p className="text-[10px] text-orange-500 font-medium">поточний місяць</p>
+          )}
+        </div>
+        <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500 transition-colors">
+          <Icon d={icons.chevRight} className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Summary */}

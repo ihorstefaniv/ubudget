@@ -168,7 +168,7 @@ export default function DashboardPage() {
     collections.filter(c => c.status === "owned").reduce((s, c) => s + toUAH(Number(c.expected_price), c.currency), 0);
 
   const netWorth =
-    uahAccounts.reduce((s, a) => s + Number(a.balance), 0) +
+    accounts.reduce((s, a) => s + toUAH(Number(a.balance), a.currency), 0) +
     totalInvestments -
     totalDebt;
 
