@@ -108,10 +108,9 @@ function PlanCell({ value, onChange }: { value: number; onChange: (v: number) =>
 // factMap / planMap — ключ = category_key з транзакцій/бюджетів.
 type BudgetRowData = CategoryDef & {
   fact: number; prevFact: number; plan: number;
-  merchants: DBMerchant[];
 };
 
-function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
+function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, topNoteMap, noteListMap, onPlanChange,
   monthIdx, year, totalIncome, prevIncome, obligations,
   envelopeMode, envelopePlanMap,
 }: {
@@ -119,6 +118,8 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
   prevFactMap: Record<string, number>;
   planMap: Record<string, number>;
   merchantMap: Record<string, DBMerchant[]>;
+  topNoteMap: Record<string, string>;
+  noteListMap: Record<string, { name: string; count: number }[]>;
   onPlanChange: (key: string, val: number) => void;
   monthIdx: number; year: number;
   totalIncome: number; prevIncome: number;
@@ -136,27 +137,24 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
   // ── Income rows (тільки де є факт або план) ────────────────
   const incRows: BudgetRowData[] = INCOME_CATEGORIES.map(c => ({
     ...c,
-    fact:      factMap[c.id]     ?? 0,
-    prevFact:  prevFactMap[c.id] ?? 0,
-    plan:      planMap[c.id]     ?? 0,
-    merchants: merchantMap[c.id] ?? [],
+    fact:     factMap[c.id]     ?? 0,
+    prevFact: prevFactMap[c.id] ?? 0,
+    plan:     planMap[c.id]     ?? 0,
   })).filter(r => r.fact > 0 || r.plan > 0);
 
   // ── Expense rows (всі + "Без категорії" якщо є) ──────────────
   const allExpRows: BudgetRowData[] = [
     ...EXPENSE_CATEGORIES.map(c => ({
       ...c,
-      fact:      factMap[c.id]     ?? 0,
-      prevFact:  prevFactMap[c.id] ?? 0,
-      plan:      planMap[c.id]     ?? 0,
-      merchants: merchantMap[c.id] ?? [],
+      fact:     factMap[c.id]     ?? 0,
+      prevFact: prevFactMap[c.id] ?? 0,
+      plan:     planMap[c.id]     ?? 0,
     })),
     ...((factMap["uncategorized"] ?? 0) > 0 ? [{
       ...getCategoryDef("uncategorized"),
-      fact:      factMap["uncategorized"],
-      prevFact:  prevFactMap["uncategorized"] ?? 0,
-      plan:      planMap["uncategorized"]     ?? 0,
-      merchants: [] as DBMerchant[],
+      fact:     factMap["uncategorized"],
+      prevFact: prevFactMap["uncategorized"] ?? 0,
+      plan:     planMap["uncategorized"]     ?? 0,
     }] : []),
   ];
 
@@ -187,20 +185,19 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
     const pct       = effectivePlan > 0 ? Math.round(r.fact / effectivePlan * 100) : 0;
     const remaining = isIncome ? r.fact - effectivePlan : effectivePlan - r.fact;
     const d         = delta(r.fact, r.prevFact);
-    // Топ заклад — тільки якщо є реальні транзакції
-    const topM      = r.fact > 0
-      ? (r.merchants.filter(m => m.is_selected).find(m => m.has_bonus) || r.merchants.find(m => m.is_selected))
-      : null;
-    const hasSelectedMerchants = r.fact > 0 && r.merchants.filter(m => m.is_selected).length > 0;
+    // Топ заклад — найчастіший note транзакцій цієї категорії
+    const topNote   = r.fact > 0 ? (topNoteMap[r.id] ?? null) : null;
+    const noteList  = noteListMap[r.id] ?? [];
+    const hasNotes  = r.fact > 0 && noteList.length > 0;
     const isExp = expandedMerchants.has(r.id);
 
     return (
       <div key={r.id}>
         <div className={`${cols} px-4 py-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors cursor-pointer group`}
-          onClick={() => hasSelectedMerchants && toggleExpand(r.id)}>
+          onClick={() => hasNotes && toggleExpand(r.id)}>
 
           <div className="flex items-center gap-2.5 min-w-0">
-            {hasSelectedMerchants
+            {hasNotes
               ? <Icon d={isExp ? extraIcons.chevDown : extraIcons.chevRight} className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
               : <div className="w-3.5" />}
             <span className="text-base shrink-0">{r.emoji}</span>
@@ -217,9 +214,9 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
           </div>
 
           <div className="flex items-center" onClick={e => e.stopPropagation()}>
-            {topM ? (
-              <span className={`text-xs px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${topM.has_bonus ? "bg-green-50 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
-                {topM.has_bonus && "🎁"} {topM.name}
+            {topNote ? (
+              <span className="text-xs px-2 py-1 rounded-lg font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 truncate max-w-[120px]">
+                {topNote}
               </span>
             ) : <span className="text-xs text-neutral-300">—</span>}
           </div>
@@ -269,12 +266,12 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
         </div>
 
         {isExp && (
-          <div className="px-14 py-2 bg-blue-50/30 dark:bg-blue-950/10 border-t border-blue-100/50 dark:border-blue-900/20">
-            <p className="text-xs text-neutral-400 mb-1.5">Заклади:</p>
+          <div className="px-14 py-2 bg-neutral-50/60 dark:bg-neutral-800/30 border-t border-neutral-100 dark:border-neutral-800">
+            <p className="text-xs text-neutral-400 mb-1.5">Частіші місця:</p>
             <div className="flex flex-wrap gap-2">
-              {r.merchants.filter(m => m.is_selected).map(m => (
-                <span key={m.id} className={`text-xs px-2.5 py-1 rounded-lg font-medium ${m.has_bonus ? "bg-green-100 dark:bg-green-950/20 text-green-600" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500"}`}>
-                  {m.has_bonus && "🎁 "}{m.name}{m.has_bonus && m.bonus_percent ? ` ${m.bonus_percent}%` : ""}
+              {noteList.map(n => (
+                <span key={n.name} className="text-xs px-2.5 py-1 rounded-lg font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
+                  {n.name} <span className="text-neutral-400">×{n.count}</span>
                 </span>
               ))}
             </div>
@@ -775,6 +772,8 @@ export default function BudgetPage() {
   const [prevFactMap, setPrevFactMap] = useState<Record<string, number>>({});
   const [planMap, setPlanMap]         = useState<Record<string, number>>({});
   const [merchantMap, setMerchantMap] = useState<Record<string, DBMerchant[]>>({});
+  const [topNoteMap, setTopNoteMap]   = useState<Record<string, string>>({});
+  const [noteListMap, setNoteListMap] = useState<Record<string, { name: string; count: number }[]>>({});
   const [totalIncome, setTotalIncome] = useState(0);
   const [prevIncome, setPrevIncome]   = useState(0);
   const [obligations, setObligations] = useState<Obligation[]>([]);
@@ -813,7 +812,7 @@ export default function BudgetPage() {
       supabase.from("subcategories").select("*").eq("user_id", user.id),
       supabase.from("budgets").select("category_key, plan_amount")
         .eq("user_id", user.id).eq("month", month).eq("year", year),
-      supabase.from("transactions").select("amount,category_key,type")
+      supabase.from("transactions").select("amount,category_key,type,note")
         .eq("user_id", user.id)
         .gte("transaction_date", dateStart).lt("transaction_date", dateEnd)
         .is("deleted_at", null),
@@ -824,7 +823,7 @@ export default function BudgetPage() {
       supabase.from("credits").select("name,monthly_payment,type")
         .eq("user_id", user.id).neq("is_archived", true).gt("monthly_payment", 0),
       supabase.from("profiles").select("modules").eq("id", user.id).single(),
-      supabase.from("envelope_settings").select("mandatory")
+      supabase.from("envelope_settings").select("mandatory,is_active")
         .eq("user_id", user.id).eq("month", month).eq("year", year).single(),
     ]);
 
@@ -837,10 +836,27 @@ export default function BudgetPage() {
     // factMap: category_key → sum (тільки expense+income; transfer ігнорується)
     const factMap: Record<string, number>     = {};
     const prevFactMap: Record<string, number> = {};
+    const noteCounts: Record<string, Record<string, number>> = {};
     (txs ?? []).forEach(t => {
       if (t.type === "transfer") return;
       const k = t.category_key || "uncategorized";
       factMap[k] = (factMap[k] ?? 0) + Number(t.amount);
+      const n = (t.note as string | null)?.trim();
+      if (n) {
+        noteCounts[k] = noteCounts[k] ?? {};
+        noteCounts[k][n] = (noteCounts[k][n] ?? 0) + 1;
+      }
+    });
+
+    // topNoteMap: найчастіший note по категорії; noteListMap: топ-5 для expand
+    const topNoteMap: Record<string, string> = {};
+    const noteListMap: Record<string, { name: string; count: number }[]> = {};
+    Object.entries(noteCounts).forEach(([k, counts]) => {
+      const sorted = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => ({ name, count }));
+      topNoteMap[k] = sorted[0].name;
+      noteListMap[k] = sorted.slice(0, 5);
     });
     (txsPrev ?? []).forEach(t => {
       if (t.type === "transfer") return;
@@ -873,8 +889,8 @@ export default function BudgetPage() {
     const inc     = INCOME_CATEGORIES.reduce((s, c) => s + (factMap[c.id] ?? 0), 0);
     const incPrev = INCOME_CATEGORIES.reduce((s, c) => s + (prevFactMap[c.id] ?? 0), 0);
 
-    // Envelope mode plan override
-    const isEnvMode = profile?.modules?.envelopes ?? false;
+    // Envelope mode — активний лише якщо і модуль увімкнено, і для цього місяця is_active
+    const isEnvMode = (profile?.modules?.envelopes ?? false) && (envSettings?.is_active ?? false);
     const envPlanMap: Record<string, number> = {};
     if (isEnvMode && envSettings?.mandatory) {
       (envSettings.mandatory as { category_key?: string; amount?: number; monthly_payment?: number }[]).forEach(item => {
@@ -888,6 +904,8 @@ export default function BudgetPage() {
     setPrevFactMap(prevFactMap);
     setPlanMap(planMap);
     setMerchantMap(merchantMap);
+    setTopNoteMap(topNoteMap);
+    setNoteListMap(noteListMap);
     setTotalIncome(inc);
     setPrevIncome(incPrev);
     setEnvelopeMode(isEnvMode);
@@ -1081,6 +1099,7 @@ export default function BudgetPage() {
             <BudgetTab
               factMap={factMap} prevFactMap={prevFactMap}
               planMap={planMap} merchantMap={merchantMap}
+              topNoteMap={topNoteMap} noteListMap={noteListMap}
               onPlanChange={handlePlanChange}
               monthIdx={monthIdx} year={year}
               totalIncome={totalIncome} prevIncome={prevIncome}
