@@ -317,7 +317,7 @@ function BondModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: (
         <Field label="Дата погашення"><input className={inp} type="date" value={f.maturity_date} onChange={e => upd("maturity_date", e.target.value)} /></Field>
       </div>
       <Field label="Купонний період">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[["monthly", "Щомісяця"], ["quarterly", "Квартал"], ["semiannual", "Пів року"], ["annual", "Рік"]].map(([v, l]) => (
             <button key={v} onClick={() => upd("coupon_period", v)} className={`py-2 rounded-xl text-xs font-medium border transition-all ${f.coupon_period === v ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>{l}</button>
           ))}
@@ -821,7 +821,7 @@ function CollectionModal({ onClose, onSaved, edit }: { onClose: () => void; onSa
 
   return (
     <ModalWrap title={edit ? "Редагувати предмет" : "Додати до колекції"} onClose={onClose}>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {COL_CATS.map(c => (
           <button key={c} onClick={() => upd("category", c)} className={`flex items-center gap-1.5 py-2 px-2 rounded-xl border text-xs font-medium transition-all ${f.category === c ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
             <span>{COL_EMOJI[c]}</span>{COL_LABEL[c]}
@@ -878,7 +878,7 @@ function CollectionsTab({ collections, onReload }: { collections: Collection[]; 
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatCard label="Предметів у колекції" value={String(owned.length)} />
         <StatCard label="Вкладено" value={fmt(totalCost)} />
         <StatCard label="Нереалізований прибуток" value={fmt(Math.abs(totalProfit))} sub={totalCost > 0 ? pct(totalProfit / totalCost * 100) : ""} color={totalProfit >= 0 ? "text-green-500" : "text-red-500"} />

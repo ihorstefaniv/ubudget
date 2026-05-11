@@ -329,7 +329,9 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
       </div>
 
       {/* Єдина таблиця: Доходи + Витрати */}
-      <Card>
+      <div className="overflow-x-auto rounded-2xl border border-neutral-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm">
+      <div className="min-w-[640px]">
+      <Card className="border-0 shadow-none rounded-none bg-transparent dark:bg-transparent">
         <div className={`${cols} px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-800/40`}>
           {["Категорія","Топ заклад","План","Факт","Попер. міс.","%","Залишок"].map(h => (
             <div key={h} className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">{h}</div>
@@ -408,6 +410,8 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, onPlanChange,
           </button>
         )}
       </Card>
+      </div>
+      </div>
 
       {/* Obligations */}
       {obligations.length > 0 && (

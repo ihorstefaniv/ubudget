@@ -269,26 +269,28 @@ export default function ReportsPage() {
       {/* Savings trend */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-5">
         <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">Заощадження по місяцях</h2>
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-end gap-1 sm:gap-2 h-24">
           {months.map(m => {
             const abs = Math.abs(m.savings);
             const maxAbs = Math.max(...months.map(x => Math.abs(x.savings)), 1);
-            const h = Math.round((abs / maxAbs) * 80);
+            const h = Math.round((abs / maxAbs) * 72);
             return (
-              <div key={m.key} className="flex-1 flex flex-col items-center gap-1">
-                <span className={`text-[9px] font-semibold ${m.savings >= 0 ? "text-green-500" : "text-red-500"}`}>
+              <div key={m.key} className="flex-1 flex flex-col items-center justify-end gap-1">
+                <span className={`text-[9px] font-semibold leading-none ${m.savings >= 0 ? "text-green-500" : "text-red-500"}`}>
                   {m.savings !== 0 ? (m.savings >= 0 ? "+" : "−") + fmt(abs) : ""}
                 </span>
-                <div className="w-full flex justify-center">
-                  <div className={`w-4/5 rounded-sm ${m.savings >= 0 ? "bg-green-300 dark:bg-green-700" : "bg-red-300 dark:bg-red-700"}`}
-                    style={{ height: Math.max(h, 4) }} />
-                </div>
-                <span className={`text-[9px] truncate w-full text-center ${m.key === selected ? "text-orange-500 font-semibold" : "text-neutral-400"}`}>
-                  {m.label}
-                </span>
+                <div className={`w-4/5 rounded-sm ${m.savings >= 0 ? "bg-green-300 dark:bg-green-700" : "bg-red-300 dark:bg-red-700"}`}
+                  style={{ height: Math.max(h, 4) }} />
               </div>
             );
           })}
+        </div>
+        <div className="flex gap-1 sm:gap-2 mt-1.5">
+          {months.map(m => (
+            <span key={m.key} className={`flex-1 text-[9px] truncate text-center ${m.key === selected ? "text-orange-500 font-semibold" : "text-neutral-400"}`}>
+              {m.label}
+            </span>
+          ))}
         </div>
       </div>
     </div>

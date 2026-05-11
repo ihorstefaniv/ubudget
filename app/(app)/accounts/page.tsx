@@ -548,7 +548,7 @@ export default function AccountsPage() {
           </p>
         </div>
         <p className="text-4xl font-bold text-neutral-900 dark:text-neutral-100 mb-5">{fmt(netWorth)}</p>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             { label: "Готівка",  val: totalCash,        color: "text-emerald-500" },
             { label: "Рахунки",  val: totalBanking,     color: "text-blue-500" },

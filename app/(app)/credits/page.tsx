@@ -1125,7 +1125,7 @@ function ArchiveTab({ credits, deposits }: { credits: Credit[]; deposits: Deposi
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
           { value: String(archivedCredits.length + archivedDeposits.length), label: "Закритих інструментів", color: "text-neutral-900 dark:text-neutral-100" },
           { value: fmt(totalPaid),         label: "Погашено кредитів",      color: "text-red-400" },

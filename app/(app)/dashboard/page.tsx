@@ -384,7 +384,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <div className="text-center p-4 rounded-xl bg-green-50 dark:bg-green-950/20">
             <p className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">Доходи</p>
             <p className="text-xl font-bold text-green-600 dark:text-green-400">{fmt(income)}</p>
