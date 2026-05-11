@@ -543,7 +543,7 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
           MERCHANT_PRESETS[txKey].map(m => ({
             user_id: user.id, category_id: cat.id, name: m.name,
             has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
-            bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
+            bonus_label: m.bonus_label ?? null, is_selected: false, is_custom: false,
           }))
         );
       }
@@ -1004,7 +1004,7 @@ export default function BudgetPage() {
           toInsert.map(m => ({
             user_id: user.id, category_id: catId, name: m.name,
             has_bonus: m.has_bonus, bonus_percent: m.bonus_percent ?? null,
-            bonus_label: m.bonus_label ?? null, is_selected: true, is_custom: false,
+            bonus_label: m.bonus_label ?? null, is_selected: false, is_custom: false,
           }))
         );
       }
