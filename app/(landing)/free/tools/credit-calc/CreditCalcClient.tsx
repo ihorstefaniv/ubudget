@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { AdSlot } from "../_components/AdSlot";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -149,6 +150,9 @@ export default function CreditCalcClient() {
             </div>
           ))}
         </div>
+
+        {/* Рекламний слот — після результату */}
+        <AdSlot context="credit" size="banner" slot="credit-after-result" />
 
         {/* Структура витрат */}
         <div className="p-5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800">
@@ -358,6 +362,9 @@ export default function CreditCalcClient() {
             </div>
           </div>
         </div>
+
+        {/* Рекламний слот — сайдбар */}
+        <AdSlot context="credit" size="sidebar" slot="credit-sidebar" />
 
         {/* Комісії */}
         <div className="p-5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 space-y-3">

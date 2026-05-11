@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { AdSlot } from "../_components/AdSlot";
 
 function fmtI(n: number) { return Math.abs(n).toLocaleString("uk-UA", { maximumFractionDigits: 0 }); }
 
@@ -108,6 +109,9 @@ export default function InflationCalcClient() {
             <p className="text-xs text-neutral-400">щоб купити те ж саме</p>
           </div>
         </div>
+
+        {/* Рекламний слот */}
+        <AdSlot context="inflation" size="banner" slot="inflation-after-result" />
 
         {/* Графік */}
         <div className="p-5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800">
@@ -223,6 +227,8 @@ export default function InflationCalcClient() {
             </div>
           </div>
         </div>
+
+        <AdSlot context="deposit" size="sidebar" slot="inflation-sidebar" />
 
         <div className="p-5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 space-y-4">
           <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Порівняння</p>

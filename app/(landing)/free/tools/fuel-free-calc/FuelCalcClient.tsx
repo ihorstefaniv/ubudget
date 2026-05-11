@@ -3,6 +3,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { AdSlot } from "../_components/AdSlot";
 
 type FuelType = "petrol" | "diesel" | "gas" | "electric" | "hybrid";
 interface Car { name: string; year: string; fuelType: FuelType; consumption: number; consumptionWinter: number; fuelPrice: number; batteryCapacity: number; soh: number; }
@@ -141,6 +142,7 @@ export default function FuelCalcClient() {
 
   return (
     <div className="space-y-6 pb-8 max-w-4xl mx-auto">
+      <AdSlot context="fuel" size="banner" slot="fuel-calc-top" />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[{ label: "На тиждень", value: fmt(weeklyTotal), color: "text-orange-500" }, { label: "На місяць", value: fmt(monthlyTotal), color: "text-orange-500" }, { label: car.fuelType === "electric" ? "кВт/100км" : "л/100км", value: `${winter ? car.consumptionWinter : car.consumption}`, color: "text-neutral-900 dark:text-neutral-100" }, { label: priceLabel, value: `${car.fuelPrice}`, color: "text-neutral-900 dark:text-neutral-100" }].map(({ label, value, color }) => (
           <div key={label} className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-4"><p className={`text-xl font-bold ${color}`}>{value}</p><p className="text-xs text-neutral-400 mt-0.5">{label}</p></div>

@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { AdSlot } from "../_components/AdSlot";
 
 type FuelType = "A-95+" | "A-95" | "A-92" | "ДП" | "ДП+" | "Газ";
 type TrendFuel = "A-95" | "ДП" | "Газ";
@@ -615,6 +616,9 @@ export default function FuelPricesClient() {
           </div>
         </div>
       )}
+
+      {/* Рекламний слот — паливні картки */}
+      <AdSlot context="fuel" size="banner" slot="fuel-prices-mid" />
 
       {/* CTA */}
       <div className="p-5 rounded-2xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30">

@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { AdSlot } from "../_components/AdSlot";
 
 // ─── Types & Helpers ──────────────────────────────────────────
 
@@ -111,6 +112,9 @@ export default function DepositCalcClient() {
           ))}
         </div>
 
+        {/* Рекламний слот — після карток результату */}
+        <AdSlot context="deposit" size="banner" slot="deposit-after-result" />
+
         {/* Графік росту */}
         <div className="p-5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800">
           <div className="flex items-center gap-2 mb-4">
@@ -150,6 +154,8 @@ export default function DepositCalcClient() {
 
       {/* Параметри */}
       <div className="space-y-4">
+        <AdSlot context="deposit" size="sidebar" slot="deposit-sidebar" />
+
         <div className="p-5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 space-y-4">
           <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Параметри депозиту</p>
 
