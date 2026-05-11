@@ -23,6 +23,7 @@ interface Transaction {
   account_id: string | null;
   transaction_date: string;
   note: string;
+  merchant_name: string | null;
   receipt_url?: string | null;
   is_recurring: boolean;
   recurring_interval?: "monthly" | "weekly" | null;
@@ -77,6 +78,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
     editTx?.to_account_id ?? accounts.find(a => a.id !== (editTx?.account_id ?? firstAcc?.id))?.id ?? ""
   );
   const [date, setDate]           = useState(editTx?.transaction_date ?? new Date().toISOString().slice(0, 10));
+  const [merchantName, setMerchantName] = useState(editTx?.merchant_name ?? "");
   const [note, setNote]           = useState(editTx?.note ?? "");
   const [repeat, setRepeat]       = useState(editTx?.is_recurring ?? false);
   const [repeatPeriod, setRepeatPeriod] = useState<"monthly" | "weekly">(editTx?.recurring_interval ?? "monthly");
@@ -164,6 +166,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
         subcategory_id: type !== "transfer" && subcategoryId ? subcategoryId : null,
         account_id: accountId || null,
         transaction_date: date,
+        merchant_name: type !== "transfer" && merchantName.trim() ? merchantName.trim() : null,
         note,
         receipt_url: photo,
         is_recurring: repeat,
@@ -355,6 +358,18 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
             )}
           </div>
 
+          {/* Заклад */}
+          {type !== "transfer" && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                Заклад <span className="text-neutral-400 font-normal">(опційно)</span>
+              </label>
+              <input value={merchantName} onChange={e => setMerchantName(e.target.value)}
+                placeholder="Сільпо, АТБ, Rozetka..."
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm placeholder:text-neutral-400 focus:outline-none focus:border-orange-300 transition-all" />
+            </div>
+          )}
+
           {/* Дата + нотатка */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -477,7 +492,7 @@ function TxRow({ tx, accounts, subcategories, onEdit, onDelete }: {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate">
-            {tx.note || cat.label}
+            {tx.merchant_name || tx.note || cat.label}
           </p>
           {tx.is_recurring && (
             <span title="Повторювана">
@@ -553,7 +568,7 @@ export default function TransactionsPage() {
       const [{ data: txData }, { data: accsData }, { data: subcatData }] = await Promise.all([
         supabase
           .from("transactions")
-          .select("id, type, amount, currency, exchange_rate, to_account_id, category_key, subcategory_id, account_id, transaction_date, note, receipt_url, is_recurring, recurring_interval")
+          .select("id, type, amount, currency, exchange_rate, to_account_id, category_key, subcategory_id, account_id, transaction_date, merchant_name, note, receipt_url, is_recurring, recurring_interval")
           .eq("user_id", user.id)
           .is("deleted_at", null)
           .gte("transaction_date", start)
@@ -583,6 +598,7 @@ export default function TransactionsPage() {
         subcategory_id:   row.subcategory_id ?? null,
         account_id:       row.account_id ?? null,
         transaction_date: row.transaction_date ?? new Date().toISOString().slice(0, 10),
+        merchant_name:    row.merchant_name ?? null,
         note:             row.note ?? "",
         receipt_url:      row.receipt_url ?? null,
         is_recurring:     row.is_recurring ?? false,
@@ -636,6 +652,7 @@ export default function TransactionsPage() {
           subcategory_id:     data.subcategory_id,
           account_id:         data.account_id,
           transaction_date:   data.transaction_date,
+          merchant_name:      data.merchant_name || null,
           note:               data.note || null,
           receipt_url:        data.receipt_url || null,
           is_recurring:       data.is_recurring,
@@ -661,6 +678,7 @@ export default function TransactionsPage() {
           subcategory_id:     data.subcategory_id,
           account_id:         data.account_id,
           transaction_date:   data.transaction_date,
+          merchant_name:      data.merchant_name || null,
           note:               data.note || null,
           receipt_url:        data.receipt_url || null,
           is_recurring:       data.is_recurring,
@@ -692,7 +710,8 @@ export default function TransactionsPage() {
       const q   = search.toLowerCase();
       const cat = getCat(tx.type, tx.category_key);
       const acc = accounts.find(a => a.id === tx.account_id)?.name ?? "";
-      if (!tx.note.toLowerCase().includes(q) &&
+      if (!(tx.merchant_name ?? "").toLowerCase().includes(q) &&
+          !tx.note.toLowerCase().includes(q) &&
           !cat.label.toLowerCase().includes(q) &&
           !acc.toLowerCase().includes(q)) return false;
     }
@@ -706,7 +725,8 @@ export default function TransactionsPage() {
       const q   = search.toLowerCase();
       const cat = getCat(tx.type, tx.category_key);
       const acc = accounts.find(a => a.id === tx.account_id)?.name ?? "";
-      if (!tx.note.toLowerCase().includes(q) &&
+      if (!(tx.merchant_name ?? "").toLowerCase().includes(q) &&
+          !tx.note.toLowerCase().includes(q) &&
           !cat.label.toLowerCase().includes(q) &&
           !acc.toLowerCase().includes(q)) return false;
     }

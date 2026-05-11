@@ -812,7 +812,7 @@ export default function BudgetPage() {
       supabase.from("subcategories").select("*").eq("user_id", user.id),
       supabase.from("budgets").select("category_key, plan_amount")
         .eq("user_id", user.id).eq("month", month).eq("year", year),
-      supabase.from("transactions").select("amount,category_key,type,note")
+      supabase.from("transactions").select("amount,category_key,type,merchant_name")
         .eq("user_id", user.id)
         .gte("transaction_date", dateStart).lt("transaction_date", dateEnd)
         .is("deleted_at", null),
@@ -841,7 +841,7 @@ export default function BudgetPage() {
       if (t.type === "transfer") return;
       const k = t.category_key || "uncategorized";
       factMap[k] = (factMap[k] ?? 0) + Number(t.amount);
-      const n = (t.note as string | null)?.trim();
+      const n = (t.merchant_name as string | null)?.trim();
       if (n) {
         noteCounts[k] = noteCounts[k] ?? {};
         noteCounts[k][n] = (noteCounts[k][n] ?? 0) + 1;

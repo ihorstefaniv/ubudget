@@ -6,12 +6,18 @@
 
 
 -- ================================================================
--- 1. НОВА КОЛОНКА: subcategory_id у transactions
+-- 1. НОВІ КОЛОНКИ у transactions
 -- ================================================================
 
 ALTER TABLE transactions
   ADD COLUMN IF NOT EXISTS subcategory_id uuid
   REFERENCES subcategories(id) ON DELETE SET NULL;
+
+ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS merchant_name text;
+
+-- Скинути пресетні (не кастомні) мерчанти — юзер обирає сам
+UPDATE merchants SET is_selected = false WHERE is_custom = false;
 
 
 -- ================================================================

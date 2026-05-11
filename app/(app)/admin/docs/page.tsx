@@ -37,7 +37,7 @@ const DB_USAGE: Record<string, { page: string; url?: string; role: string }[]> =
   transactions: [
     { page: "Дашборд", url: "/dashboard", role: "Доходи та витрати місяця, список останніх операцій" },
     { page: "Транзакції", url: "/transactions", role: "Основний CRUD: перегляд, додавання, редагування, soft-delete" },
-    { page: "Бюджет", url: "/budget", role: "Фактичні витрати по категоріях (SUM amount WHERE category_key)" },
+    { page: "Бюджет", url: "/budget", role: "Фактичні витрати по категоріях (SUM amount WHERE category_key). merchant_name → «Топ заклад» у таблиці бюджету" },
     { page: "Конверти", url: "/envelopes", role: "Витрати по тижнях (SUM WHERE type=expense AND date IN week)" },
     { page: "Звіти", url: "/reports", role: "Аналіз доходів/витрат по місяцях, розбивка по категоріях" },
     { page: "Кредити", url: "/credits", role: "Платіж по кредиту → INSERT expense transaction через pay_credit RPC" },
@@ -61,7 +61,7 @@ const DB_USAGE: Record<string, { page: string; url?: string; role: string }[]> =
     { page: "Транзакції", url: "/transactions", role: "Опційна деталізація транзакції (subcategory_id)" },
   ],
   merchants: [
-    { page: "Бюджет", url: "/budget", role: "Список закладів по кожній категорії з cashback %, фільтрація server-side" },
+    { page: "Бюджет → Категорії", url: "/budget", role: "Конфігурація закладів з cashback % для розрахунку бонусів (не для трекінгу транзакцій)" },
   ],
   profiles: [
     { page: "Налаштування", url: "/settings", role: "base_currency, modules (jsonb), notifications, full_name" },
