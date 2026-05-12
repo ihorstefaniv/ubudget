@@ -10,7 +10,8 @@ const geist = Geist({
 
 export const metadata: Metadata = {
   title: "UBudget",
-  description: "Мінімалістичний фінансовий додаток",
+  description: "Відстежуй витрати, рахунки, бюджет і інвестиції в одному місці",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
