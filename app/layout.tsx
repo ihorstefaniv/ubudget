@@ -11,6 +11,14 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "UBudget",
   description: "Мінімалістичний фінансовий додаток",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "UBudget",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
@@ -26,6 +34,13 @@ export default function RootLayout({
     <html lang="uk" className={geist.variable} suppressHydrationWarning>
       <body className="antialiased" suppressHydrationWarning>
         {children}
+
+        {/* ── PWA service worker ── */}
+        <Script id="sw-register" strategy="afterInteractive">{`
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+          }
+        `}</Script>
 
         {/* ── Бейдж версії білда (нижній правий кут) ── */}
         <div className="fixed bottom-2 right-2 z-50 pointer-events-none select-none">
