@@ -11,7 +11,7 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "UBudget",
   description: "Відстежуй витрати, рахунки, бюджет і інвестиції в одному місці",
-  manifest: "/api/pwa-manifest",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -34,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="uk" className={geist.variable} suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/api/pwa-manifest" />
+        <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#f97316" />
       </head>
       <body className="antialiased" suppressHydrationWarning>
