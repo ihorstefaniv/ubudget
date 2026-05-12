@@ -807,7 +807,7 @@ export default function TransactionsPage() {
           />
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-xl">
+          <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-xl overflow-x-auto max-w-full">
             {(["all", "expense", "income", "transfer"] as const).map(t => (
               <button key={t} onClick={() => { setFilterType(t); setFilterCategory("all"); }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${

@@ -462,6 +462,8 @@ export default function FinancialHistoryPage() {
       {/* ── Табличний вигляд ── */}
       {view === "table" && (
         <Card noPadding>
+          <div className="overflow-x-auto">
+          <div className="min-w-[580px]">
           {/* Header */}
           <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-800/40">
             {["Місяць", "Дохід", "Витрати", "Різниця", "Заощ. %", "Топ категорія"].map(h => (
@@ -511,6 +513,8 @@ export default function FinancialHistoryPage() {
               </div>
             </div>
           )}
+          </div>
+          </div>
         </Card>
       )}
 

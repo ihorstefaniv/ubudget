@@ -211,20 +211,14 @@ export default function LandingHeader() {
 
       <div className={`fixed inset-0 z-40 md:hidden transition-all duration-300 ${mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
         <div className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-        <div className={`absolute top-0 right-0 h-full w-72 bg-white dark:bg-neutral-950 shadow-2xl transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "translate-x-full"}`}>
-          <div className="flex items-center justify-between px-5 h-16 border-b border-neutral-100 dark:border-neutral-800">
-            <span className="font-bold"><span className="text-orange-400">U</span><span className="text-neutral-900 dark:text-neutral-100">Budget</span></span>
-            <button onClick={() => setMobileOpen(false)} className="w-8 h-8 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-400">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
+        <div className={`absolute top-16 right-0 h-[calc(100%-4rem)] w-72 bg-white dark:bg-neutral-950 shadow-2xl transition-transform duration-300 flex flex-col ${mobileOpen ? "translate-x-0" : "translate-x-full"}`}>
           {isAuthed && user && (
-            <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 bg-orange-50/50 dark:bg-orange-950/10">
+            <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 bg-orange-50/50 dark:bg-orange-950/10 shrink-0">
               <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Вітаю, {user.name.split(" ")[0]}!</p>
               <p className="text-xs text-neutral-400 mt-0.5">{user.balance.toLocaleString("uk-UA")} грн · баланс</p>
             </div>
           )}
-          <div className="px-4 py-4 space-y-1 overflow-y-auto">
+          <div className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
             {isAuthed ? (
               <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-orange-500 bg-orange-50 dark:bg-orange-950/20">🏠 Мій кабінет</Link>
             ) : (
@@ -248,7 +242,7 @@ export default function LandingHeader() {
             )}
           </div>
           {!isAuthed && (
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-neutral-100 dark:border-neutral-800 space-y-2">
+            <div className="shrink-0 p-4 border-t border-neutral-100 dark:border-neutral-800 space-y-2">
               <Link href="/register" onClick={() => setMobileOpen(false)} className="block w-full py-3 rounded-xl bg-orange-400 text-white text-sm font-bold text-center hover:bg-orange-500 transition-colors">Зареєструватись</Link>
               <Link href="/login" onClick={() => setMobileOpen(false)} className="block w-full py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm font-medium text-center text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors">Увійти</Link>
             </div>

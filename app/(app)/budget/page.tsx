@@ -1055,13 +1055,13 @@ export default function BudgetPage() {
           <div className="w-px h-5 bg-neutral-100 dark:bg-neutral-800 mx-1" />
           <button onClick={copyPlan}
             className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-orange-400 transition-colors">
-            <Icon d={extraIcons.copy} className="w-3.5 h-3.5" />Копіювати план
+            <Icon d={extraIcons.copy} className="w-3.5 h-3.5" /><span className="hidden sm:inline">Копіювати план</span>
           </button>
           <div className="w-px h-5 bg-neutral-100 dark:bg-neutral-800 mx-1" />
           <button onClick={cleanBudgets} disabled={seeding}
             className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-red-400 transition-colors disabled:opacity-50">
             {seeding ? <Icon d={icons.loader} className="w-3.5 h-3.5 animate-spin" /> : "↺"}
-            Очистити
+            <span className="hidden sm:inline">Очистити</span>
           </button>
         </Card>
       </div>

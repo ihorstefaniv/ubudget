@@ -269,7 +269,7 @@ function TrendChart({ data, fuel }: { data: TrendPoint[]; fuel: TrendFuel }) {
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 12, marginBottom: 20 }}>
         {[
           { label: "Поточна", value: `₴${lastVal.toFixed(2)}`, color: "white" },
           { label: "Зміна", value: `${diff >= 0 ? "+" : ""}${diff.toFixed(2)}`, color: diff >= 0 ? "#ef4444" : "#22c55e" },
@@ -565,7 +565,7 @@ export default function FuelPricesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800/50 p-1 rounded-2xl w-fit">
+      <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800/50 p-1 rounded-2xl w-fit max-w-full overflow-x-auto">
         {([{id:"stations",label:"⛽ АЗС"},{id:"regions",label:"🗺 Області"},{id:"trend",label:"📈 Динаміка"}] as const).map(tab=>(
           <button key={tab.id} onClick={()=>setView(tab.id)}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${

@@ -320,7 +320,7 @@ function MapPicker({ onRouteFound }: { onRouteFound: (from: string, to: string, 
       <p className="text-xs text-neutral-400">💡 Або клікніть на карту щоб додати точки вручну</p>
 
       {routeInfo && (
-        <div className="flex items-center justify-between p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30">
           <div className="flex gap-6">
             <div>
               <p className="text-lg font-bold text-orange-500">{routeInfo.km} км</p>

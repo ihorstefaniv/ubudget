@@ -388,7 +388,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── Основний контент ── */}
-      <div className="flex-1 lg:ml-60 flex flex-col min-h-screen">
+      <div className="flex-1 lg:ml-60 flex flex-col min-h-screen overflow-x-hidden">
 
         {/* Мобільний хедер (тільки < lg) */}
         <header className="lg:hidden sticky top-0 z-20 h-14 bg-white dark:bg-neutral-900 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between px-4">
