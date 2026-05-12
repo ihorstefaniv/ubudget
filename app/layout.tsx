@@ -33,6 +33,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="uk" className={geist.variable} suppressHydrationWarning>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#f97316" />
+      </head>
       <body className="antialiased" suppressHydrationWarning>
         {children}
 
