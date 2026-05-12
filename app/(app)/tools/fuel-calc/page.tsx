@@ -620,7 +620,7 @@ export default function FuelCalcPage() {
               {routes.map((r) => {
                 const { cost } = calcRouteCost(r, car, winter);
                 return (
-                  <div key={r.id} className="flex items-center justify-between gap-4 p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700">
+                  <div key={r.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate">
                         {r.from} → {r.to}
@@ -628,8 +628,8 @@ export default function FuelCalcPage() {
                       </p>
                       <p className="text-xs text-orange-400 mt-0.5">{fmt(cost)} / поїздка</p>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs text-neutral-400">разів/тиждень</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-neutral-400 hidden sm:inline">разів/тиждень</span>
                       <div className="flex items-center gap-1">
                         <button onClick={() => updateRoute(r.id, "weeklyCnt", Math.max(0, r.weeklyCnt - 1))}
                           className="w-7 h-7 rounded-lg bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 flex items-center justify-center hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors text-sm font-bold">−</button>
@@ -637,7 +637,8 @@ export default function FuelCalcPage() {
                         <button onClick={() => updateRoute(r.id, "weeklyCnt", r.weeklyCnt + 1)}
                           className="w-7 h-7 rounded-lg bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 flex items-center justify-center hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors text-sm font-bold">+</button>
                       </div>
-                      <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 w-28 text-right">
+                      <span className="text-xs text-neutral-400 sm:hidden">разів/тиждень</span>
+                      <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 w-24 text-right ml-auto sm:ml-0">
                         {fmt(cost * r.weeklyCnt)}
                       </span>
                     </div>

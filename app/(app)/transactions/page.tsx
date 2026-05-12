@@ -246,26 +246,28 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
 
             {/* Курс обміну */}
             {showRate && (
-              <div className="flex items-center gap-2 pt-1">
-                <span className="text-xs text-neutral-400 shrink-0">
-                  1 {currency} =
-                </span>
-                <input
-                  type="number" value={exchangeRate}
-                  onChange={e => setExchangeRate(+e.target.value)}
-                  step="0.01" min="0"
-                  className="w-24 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all"
-                />
-                <span className="text-xs text-neutral-400">UAH</span>
-                {amount && +amount > 0 && (
-                  <span className="text-xs text-neutral-400 ml-1">
-                    ≈ {fmt(+amount * exchangeRate, "UAH", 0)}
+              <>
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-neutral-400 shrink-0">
+                    1 {currency} =
                   </span>
+                  <input
+                    type="number" value={exchangeRate}
+                    onChange={e => setExchangeRate(+e.target.value)}
+                    step="0.01" min="0"
+                    className="w-24 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all"
+                  />
+                  <span className="text-xs text-neutral-400">UAH</span>
+                  <span className="text-[10px] text-neutral-300 dark:text-neutral-600 ml-auto shrink-0">
+                    {nbuLoaded ? "курс НБУ" : "НБУ…"}
+                  </span>
+                </div>
+                {amount && +amount > 0 && (
+                  <p className="text-xs text-neutral-400 pl-1 mt-0.5">
+                    ≈ {fmt(+amount * exchangeRate, "UAH", 0)}
+                  </p>
                 )}
-                <span className="text-[10px] text-neutral-300 dark:text-neutral-600 ml-auto shrink-0">
-                  {nbuLoaded ? "курс НБУ" : "НБУ…"}
-                </span>
-              </div>
+              </>
             )}
 
             {/* Інфо для переказу з обміном */}

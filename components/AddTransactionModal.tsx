@@ -233,15 +233,15 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
                   className="w-24 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all"
                 />
                 <span className="text-xs text-neutral-400">UAH</span>
-                {amount && +amount > 0 && (
-                  <span className="text-xs text-neutral-400 ml-1">
-                    ≈ {fmt(+amount * exchangeRate, "UAH", 0)}
-                  </span>
-                )}
                 <span className="text-[10px] text-neutral-300 dark:text-neutral-600 ml-auto shrink-0">
                   {nbuLoaded ? "курс НБУ" : "НБУ…"}
                 </span>
               </div>
+              {amount && +amount > 0 && (
+                <p className="text-xs text-neutral-400 pl-1 mt-0.5">
+                  ≈ {fmt(+amount * exchangeRate, "UAH", 0)}
+                </p>
+              )}
             )}
 
             {/* Сума отримання при крос-валютному переказі */}
