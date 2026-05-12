@@ -11,7 +11,7 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "UBudget",
   description: "Відстежуй витрати, рахунки, бюджет і інвестиції в одному місці",
-  manifest: "/manifest.json",
+  manifest: "/api/pwa-manifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -34,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="uk" className={geist.variable} suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href="/api/pwa-manifest" />
         <meta name="theme-color" content="#f97316" />
       </head>
       <body className="antialiased" suppressHydrationWarning>
@@ -43,7 +43,7 @@ export default function RootLayout({
         {/* ── PWA service worker ── */}
         <Script id="sw-register" strategy="afterInteractive">{`
           if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
+            navigator.serviceWorker.register('/api/sw', { scope: '/' }).catch(() => {});
           }
         `}</Script>
 
