@@ -37,6 +37,15 @@
       "purpose": "maskable"
     }
   ],
+  "screenshots": [
+    {
+      "src": "/icons/screenshot-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "UBudget — головний екран"
+    }
+  ],
   "shortcuts": [
     {
       "name": "Додати транзакцію",
