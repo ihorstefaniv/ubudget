@@ -2,26 +2,55 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "UBudget",
+    name: "UBudget — Фінансовий менеджер",
     short_name: "UBudget",
-    description: "Мінімалістичний фінансовий додаток",
+    description: "Відстежуй витрати, рахунки, бюджет і інвестиції в одному місці",
     start_url: "/dashboard",
+    scope: "/",
     display: "standalone",
     background_color: "#ffffff",
     theme_color: "#f97316",
     orientation: "portrait",
+    lang: "uk",
+    categories: ["finance", "productivity"],
     icons: [
       {
         src: "/icons/icon-192.png",
         sizes: "192x192",
         type: "image/png",
-        purpose: "any maskable",
+        purpose: "any",
+      },
+      {
+        src: "/icons/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "maskable",
       },
       {
         src: "/icons/icon-512.png",
         sizes: "512x512",
         type: "image/png",
-        purpose: "any maskable",
+        purpose: "any",
+      },
+      {
+        src: "/icons/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
+      },
+    ],
+    shortcuts: [
+      {
+        name: "Додати транзакцію",
+        short_name: "Транзакція",
+        url: "/transactions",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
+      },
+      {
+        name: "Дашборд",
+        short_name: "Дашборд",
+        url: "/dashboard",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
       },
     ],
   };
