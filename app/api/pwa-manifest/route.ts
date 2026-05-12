@@ -1,0 +1,47 @@
+import { NextResponse } from "next/server";
+
+const manifest = {
+  id: "/",
+  name: "UBudget — Фінансовий менеджер",
+  short_name: "UBudget",
+  description:
+    "UBudget — простий додаток для особистого бюджету. Рахунки, витрати, кредити, депозити, конверти, Health Score — все в одному місці. Безкоштовно. Без реклами.",
+  start_url: "/dashboard",
+  scope: "/",
+  dir: "ltr",
+  display: "standalone",
+  background_color: "#ffffff",
+  theme_color: "#f97316",
+  orientation: "portrait",
+  lang: "uk",
+  categories: ["finance", "productivity"],
+  icons: [
+    { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+    { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+  ],
+  screenshots: [
+    {
+      src: "/icons/screenshot-mobile.png",
+      sizes: "390x844",
+      type: "image/png",
+      form_factor: "narrow",
+      label: "UBudget — головний екран",
+    },
+  ],
+  shortcuts: [
+    { name: "Додати транзакцію", url: "/transactions" },
+    { name: "Дашборд", url: "/dashboard" },
+  ],
+};
+
+export async function GET() {
+  return new NextResponse(JSON.stringify(manifest, null, 2), {
+    headers: {
+      "Content-Type": "application/manifest+json",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
