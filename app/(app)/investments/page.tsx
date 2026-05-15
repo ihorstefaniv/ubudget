@@ -4,53 +4,16 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import FeatureGate from "@/components/FeatureGate";
 import { FALLBACK_RATES, rateFor } from "@/lib/nbu-rates";
+import { Icon, icons, Modal, Card, ToggleRow } from "@/components/ui";
+import { fmt, pct, monthsLeft } from "@/lib/format";
 
-type Tab = "portfolio" | "stocks" | "bonds" | "realestate" | "business" | "collections";
+// ─── Локальні аліаси ──────────────────────────────────────────
+// fmt з 0 знаками після коми для сум (investments показує цілі числа)
+const money = (n: number, c = "UAH") => fmt(n, c, 0);
+// monthsLeft(d) — місяців ДО дати d (lib/format рахує ВІД дати)
+const mLeft = (d: string) => monthsLeft(new Date().toISOString().slice(0, 10), d);
 
-interface Stock { id: string; ticker: string; name: string; broker: string; quantity: number; buy_price: number; current_price: number; currency: string; buy_date: string; }
-interface Bond { id: string; name: string; type: string; issuer: string; isin: string; amount: number; interest_rate: number; currency: string; buy_date: string; maturity_date: string; coupon_period: string; is_free_to_sell: boolean; }
-interface RealEstate { id: string; name: string; address: string; area: number; buy_price: number; current_price: number; rental_income: number; currency: string; buy_date: string; }
-interface BusinessEmployee { id: string; business_id: string; name: string; role: string; type: string; salary: number; }
-interface BusinessItem { id: string; business_id: string; section: string; label: string; amount: number; }
-interface Business { id: string; name: string; type: string; share: number; start_date: string; items: BusinessItem[]; employees: BusinessEmployee[]; }
-interface Collection { id: string; name: string; category: string; description: string; buy_price: number; expected_price: number; currency: string; buy_date: string; status: string; }
-
-function fmt(n: number, cur = "UAH") {
-  const v = Math.abs(n).toLocaleString("uk-UA", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  if (cur === "USD") return `$${v}`;
-  if (cur === "EUR") return `€${v}`;
-  return `${v} грн`;
-}
-function pct(n: number) { return `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`; }
-function monthsLeft(d: string) { const e = new Date(d), n = new Date(); return Math.max(0, (e.getFullYear() - n.getFullYear()) * 12 + e.getMonth() - n.getMonth()); }
-function toUAH(n: number, cur: string) { return n * rateFor(FALLBACK_RATES, cur); }
-function isCouponDue(buyDate: string | null, couponPeriod: string): boolean {
-  if (!buyDate) return false;
-  const start = new Date(buyDate);
-  const today = new Date();
-  if (today.getDate() !== start.getDate()) return false;
-  const periods: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 };
-  const periodMonths = periods[couponPeriod] ?? 12;
-  const monthsSince = (today.getFullYear() - start.getFullYear()) * 12 + today.getMonth() - start.getMonth();
-  return monthsSince > 0 && monthsSince % periodMonths === 0;
-}
-
-const Icon = ({ d, className = "w-5 h-5" }: { d: string; className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d={d} />
-  </svg>
-);
-const icons = {
-  plus:   "M12 4v16m8-8H4",
-  close:  "M6 18L18 6M6 6l12 12",
-  edit:   "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z",
-  trash:  "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16",
-  loader: "M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83",
-  trend:  "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
-  person: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
-};
-
-const inp = "w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:border-orange-300 transition-all";
+const inp = "w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 dark:focus:border-orange-500 transition-all";
 const btnPrimary = "w-full py-3.5 rounded-xl bg-orange-400 text-white text-sm font-bold hover:bg-orange-500 disabled:opacity-50 transition-colors flex items-center justify-center gap-2";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -62,7 +25,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function StatCard({ label, value, sub, color = "text-neutral-900 dark:text-neutral-100" }: { label: string; value: string; sub?: string; color?: string }) {
+function NumStat({ label, value, sub, color = "text-neutral-900 dark:text-neutral-100" }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 p-4">
       <p className={`text-xl font-bold ${color}`}>{value}</p>
@@ -72,32 +35,34 @@ function StatCard({ label, value, sub, color = "text-neutral-900 dark:text-neutr
   );
 }
 
-function ModalWrap({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function ToggleBox({ label, desc, checked, onChange }: { label: string; desc?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto border-t sm:border border-neutral-100 dark:border-neutral-800 shadow-xl">
-        <div className="sticky top-0 bg-white dark:bg-neutral-900 px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between z-10">
-          <h2 className="font-semibold text-neutral-900 dark:text-neutral-100">{title}</h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 transition-colors"><Icon d={icons.close} className="w-5 h-5" /></button>
-        </div>
-        <div className="px-6 py-5 space-y-4">{children}</div>
-      </div>
+    <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700">
+      <ToggleRow label={label} desc={desc} checked={checked} onChange={onChange} />
     </div>
   );
 }
 
-function Toggle({ label, sub, checked, onChange }: { label: string; sub?: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700">
-      <div>
-        <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{label}</p>
-        {sub && <p className="text-xs text-neutral-400 mt-0.5">{sub}</p>}
-      </div>
-      <button onClick={() => onChange(!checked)} className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${checked ? "bg-orange-400" : "bg-neutral-200 dark:bg-neutral-700"}`}>
-        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : ""}`} />
-      </button>
-    </div>
-  );
+type Tab = "portfolio" | "stocks" | "bonds" | "realestate" | "business" | "collections";
+
+interface Stock { id: string; ticker: string; name: string; broker: string; quantity: number; buy_price: number; current_price: number; currency: string; buy_date: string; }
+interface Bond { id: string; name: string; type: string; issuer: string; isin: string; amount: number; interest_rate: number; currency: string; buy_date: string; maturity_date: string; coupon_period: string; is_free_to_sell: boolean; }
+interface RealEstate { id: string; name: string; address: string; area: number; buy_price: number; current_price: number; rental_income: number; currency: string; buy_date: string; }
+interface BusinessEmployee { id: string; business_id: string; name: string; role: string; type: string; salary: number; }
+interface BusinessItem { id: string; business_id: string; section: string; label: string; amount: number; }
+interface Business { id: string; name: string; type: string; share: number; start_date: string; items: BusinessItem[]; employees: BusinessEmployee[]; }
+interface Collection { id: string; name: string; category: string; description: string; buy_price: number; expected_price: number; currency: string; buy_date: string; status: string; }
+
+function toUAH(n: number, cur: string) { return n * rateFor(FALLBACK_RATES, cur); }
+function isCouponDue(buyDate: string | null, couponPeriod: string): boolean {
+  if (!buyDate) return false;
+  const start = new Date(buyDate);
+  const today = new Date();
+  if (today.getDate() !== start.getDate()) return false;
+  const periods: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 };
+  const periodMonths = periods[couponPeriod] ?? 12;
+  const monthsSince = (today.getFullYear() - start.getFullYear()) * 12 + today.getMonth() - start.getMonth();
+  return monthsSince > 0 && monthsSince % periodMonths === 0;
 }
 
 // ─── STOCKS ───────────────────────────────────────────────────
@@ -144,7 +109,7 @@ function StockModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: 
   }
 
   return (
-    <ModalWrap title={edit ? "Редагувати позицію" : "Додати акцію / ETF"} onClose={onClose}>
+    <Modal size="md" title={edit ? "Редагувати позицію" : "Додати акцію / ETF"} onClose={onClose}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Тікер *"><input className={inp} value={f.ticker} onChange={e => upd("ticker", e.target.value)} placeholder="AAPL" /></Field>
         <Field label="Назва"><input className={inp} value={f.name} onChange={e => upd("name", e.target.value)} placeholder="Apple Inc." /></Field>
@@ -176,7 +141,7 @@ function StockModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: 
       <button className={btnPrimary} onClick={save} disabled={saving}>
         {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : edit ? "Зберегти" : "Додати"}
       </button>
-    </ModalWrap>
+    </Modal>
   );
 }
 
@@ -193,9 +158,9 @@ function StocksTab({ stocks, onReload }: { stocks: Stock[]; onReload: () => void
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Вартість портфеля" value={fmt(totalValue)} color="text-blue-500" />
-        <StatCard label="Вкладено" value={fmt(totalCost)} />
-        <StatCard label="P&L" value={fmt(Math.abs(totalPnL))} sub={totalCost > 0 ? pct(totalPnL / totalCost * 100) : ""} color={totalPnL >= 0 ? "text-green-500" : "text-red-500"} />
+        <NumStat label="Вартість портфеля" value={fmt(totalValue)} color="text-blue-500" />
+        <NumStat label="Вкладено" value={fmt(totalCost)} />
+        <NumStat label="P&L" value={fmt(Math.abs(totalPnL))} sub={totalCost > 0 ? pct(totalPnL / totalCost * 100) : ""} color={totalPnL >= 0 ? "text-green-500" : "text-red-500"} />
       </div>
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 overflow-hidden">
         <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
@@ -287,7 +252,7 @@ function BondModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: (
   }
 
   return (
-    <ModalWrap title={edit ? "Редагувати облігацію" : "Додати облігацію"} onClose={onClose}>
+    <Modal size="md" title={edit ? "Редагувати облігацію" : "Додати облігацію"} onClose={onClose}>
       <div className="flex gap-2">
         {[["ovdp", "🇺🇦 ОВДП"], ["corporate", "🏢 Корпоративна"]].map(([v, l]) => (
           <button key={v} onClick={() => setType(v)} className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${type === v ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>{l}</button>
@@ -323,7 +288,7 @@ function BondModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: (
           ))}
         </div>
       </Field>
-      <Toggle label="Вільний до продажу" sub="На вторинному ринку" checked={freeToSell} onChange={setFreeToSell} />
+      <ToggleBox label="Вільний до продажу" desc="На вторинному ринку" checked={freeToSell} onChange={setFreeToSell} />
       {income > 0 && (
         <div className="p-4 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30">
           <p className="text-xs text-green-600 font-medium">Очікуваний дохід за {months} міс.</p>
@@ -341,7 +306,7 @@ function BondModal({ onClose, onSaved, edit }: { onClose: () => void; onSaved: (
       <button className={btnPrimary} onClick={save} disabled={saving}>
         {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : edit ? "Зберегти" : "Додати облігацію"}
       </button>
-    </ModalWrap>
+    </Modal>
   );
 }
 
@@ -381,7 +346,7 @@ function BondCouponModal({ bond, onClose, onSaved }: { bond: Bond; onClose: () =
   }
 
   return (
-    <ModalWrap title="Купонний дохід" onClose={onClose}>
+    <Modal size="md" title="Купонний дохід" onClose={onClose}>
       <div className="p-4 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30">
         <p className="text-xs text-neutral-500">{bond.name} · {bond.interest_rate}% · {bond.issuer}</p>
         <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mt-1">
@@ -406,7 +371,7 @@ function BondCouponModal({ bond, onClose, onSaved }: { bond: Bond; onClose: () =
       <button className={btnPrimary} onClick={save} disabled={saving}>
         {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : "Зарахувати купон"}
       </button>
-    </ModalWrap>
+    </Modal>
   );
 }
 
@@ -418,7 +383,7 @@ function BondsTab({ bonds, onReload }: { bonds: Bond[]; onReload: () => void }) 
   const [filter, setFilter] = useState("all");
   const filtered = bonds.filter(b => filter === "all" || b.type === filter);
   const totalUAH    = bonds.reduce((s, b) => s + toUAH(b.amount, b.currency), 0);
-  const totalIncome = bonds.reduce((s, b) => s + b.amount * (b.interest_rate / 100) * (b.maturity_date ? monthsLeft(b.maturity_date) / 12 : 0), 0);
+  const totalIncome = bonds.reduce((s, b) => s + b.amount * (b.interest_rate / 100) * (b.maturity_date ? mLeft(b.maturity_date) / 12 : 0), 0);
   const couponLabels: Record<string, string> = { monthly: "щомісяця", quarterly: "щокварталу", semiannual: "кожні пів року", annual: "щорічно" };
 
   async function del(id: string) { await supabase.from("bonds").delete().eq("id", id); onReload(); }
@@ -426,9 +391,9 @@ function BondsTab({ bonds, onReload }: { bonds: Bond[]; onReload: () => void }) 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Інвестовано" value={fmt(totalUAH)} color="text-violet-500" />
-        <StatCard label="Очікуваний дохід" value={fmt(totalIncome)} color="text-green-500" />
-        <StatCard label="Вільних до продажу" value={bonds.filter(b => b.is_free_to_sell).length.toString()} />
+        <NumStat label="Інвестовано" value={fmt(totalUAH)} color="text-violet-500" />
+        <NumStat label="Очікуваний дохід" value={fmt(totalIncome)} color="text-green-500" />
+        <NumStat label="Вільних до продажу" value={bonds.filter(b => b.is_free_to_sell).length.toString()} />
       </div>
       <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-800/50 p-1 rounded-xl w-fit">
         {[["all", "Всі"], ["ovdp", "🇺🇦 ОВДП"], ["corporate", "🏢 Корпоративні"]].map(([v, l]) => (
@@ -445,7 +410,7 @@ function BondsTab({ bonds, onReload }: { bonds: Bond[]; onReload: () => void }) 
         ) : (
           <div className="divide-y divide-neutral-50 dark:divide-neutral-800/50">
             {filtered.map(b => {
-              const income = b.maturity_date ? b.amount * (b.interest_rate / 100) * (monthsLeft(b.maturity_date) / 12) : 0;
+              const income = b.maturity_date ? b.amount * (b.interest_rate / 100) * (mLeft(b.maturity_date) / 12) : 0;
               return (
                 <div key={b.id} className="group p-5 hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors">
                   <div className="flex items-start justify-between gap-3 mb-3">
@@ -471,7 +436,7 @@ function BondsTab({ bonds, onReload }: { bonds: Bond[]; onReload: () => void }) 
                       { label: "Сума", value: fmt(b.amount, b.currency) },
                       { label: "Ставка", value: `${b.interest_rate}%` },
                       { label: "Дохід", value: `+${fmt(income, b.currency)}`, green: true },
-                      { label: "Погашення", value: b.maturity_date ? `${new Date(b.maturity_date).toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" })} · ${monthsLeft(b.maturity_date)} міс.` : "—" },
+                      { label: "Погашення", value: b.maturity_date ? `${new Date(b.maturity_date).toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" })} · ${mLeft(b.maturity_date)} міс.` : "—" },
                     ].map(({ label, value, green }) => (
                       <div key={label}><p className="text-xs text-neutral-400">{label}</p><p className={`text-sm font-medium mt-0.5 ${green ? "text-green-500" : "text-neutral-900 dark:text-neutral-100"}`}>{value}</p></div>
                     ))}
@@ -510,7 +475,7 @@ function RealEstateModal({ onClose, onSaved, edit }: { onClose: () => void; onSa
   }
 
   return (
-    <ModalWrap title={edit ? "Редагувати об'єкт" : "Додати нерухомість"} onClose={onClose}>
+    <Modal size="md" title={edit ? "Редагувати об'єкт" : "Додати нерухомість"} onClose={onClose}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Назва *"><input className={inp} value={f.name} onChange={e => upd("name", e.target.value)} placeholder="Квартира Львів" /></Field>
         <Field label="Площа (м²)"><input className={inp} type="number" value={f.area} onChange={e => upd("area", e.target.value)} placeholder="52" /></Field>
@@ -529,7 +494,7 @@ function RealEstateModal({ onClose, onSaved, edit }: { onClose: () => void; onSa
       <button className={btnPrimary} onClick={save} disabled={saving}>
         {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : edit ? "Зберегти" : "Додати"}
       </button>
-    </ModalWrap>
+    </Modal>
   );
 }
 
@@ -546,9 +511,9 @@ function RealEstateTab({ realestate, onReload }: { realestate: RealEstate[]; onR
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Загальна вартість" value={fmt(totalValue)} color="text-orange-500" />
-        <StatCard label="Оренда / міс" value={fmt(totalRental)} color="text-green-500" sub={`${fmt(totalRental * 12)} / рік`} />
-        <StatCard label="Зростання капіталу" value={fmt(Math.abs(totalGain))} color={totalGain >= 0 ? "text-green-500" : "text-red-500"} />
+        <NumStat label="Загальна вартість" value={fmt(totalValue)} color="text-orange-500" />
+        <NumStat label="Оренда / міс" value={fmt(totalRental)} color="text-green-500" sub={`${fmt(totalRental * 12)} / рік`} />
+        <NumStat label="Зростання капіталу" value={fmt(Math.abs(totalGain))} color={totalGain >= 0 ? "text-green-500" : "text-red-500"} />
       </div>
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-100 dark:border-neutral-800 overflow-hidden">
         <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
@@ -716,10 +681,10 @@ function BusinessTab({ businesses, onReload }: { businesses: Business[]; onReloa
       {biz && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard label="Дохід / міс" value={fmt(totalIncome)} color="text-green-500" />
-            <StatCard label="Витрати / міс" value={fmt(totalExpense + totalSalary)} color="text-red-500" />
-            <StatCard label="Чистий прибуток" value={fmt(Math.abs(netProfit))} sub={`${+margin >= 0 ? "+" : ""}${margin}% рентабельність`} color={netProfit >= 0 ? "text-orange-500" : "text-red-500"} />
-            <StatCard label="Активи бізнесу" value={fmt(totalAssets)} />
+            <NumStat label="Дохід / міс" value={fmt(totalIncome)} color="text-green-500" />
+            <NumStat label="Витрати / міс" value={fmt(totalExpense + totalSalary)} color="text-red-500" />
+            <NumStat label="Чистий прибуток" value={fmt(Math.abs(netProfit))} sub={`${+margin >= 0 ? "+" : ""}${margin}% рентабельність`} color={netProfit >= 0 ? "text-orange-500" : "text-red-500"} />
+            <NumStat label="Активи бізнесу" value={fmt(totalAssets)} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -752,7 +717,7 @@ function BusinessTab({ businesses, onReload }: { businesses: Business[]; onReloa
               <div className="space-y-3">
                 {employees.map(e => (
                   <div key={e.id} className="group flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0"><Icon d={icons.person} className="w-3.5 h-3.5 text-neutral-400" /></div>
+                    <div className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0"><Icon d={icons.user} className="w-3.5 h-3.5 text-neutral-400" /></div>
                     <input defaultValue={e.name} onBlur={ev => updateEmployee(e.id, "name", ev.target.value)} className="flex-1 px-2 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 min-w-0" placeholder="Ім'я" />
                     <input defaultValue={e.role ?? ""} onBlur={ev => updateEmployee(e.id, "role", ev.target.value)} className="flex-1 px-2 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent text-sm text-neutral-500 focus:outline-none focus:border-orange-300 min-w-0" placeholder="Роль" />
                     <select defaultValue={e.type} onBlur={ev => updateEmployee(e.id, "type", ev.target.value)} className="px-2 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent text-xs text-neutral-600 dark:text-neutral-400 focus:outline-none shrink-0">
@@ -820,7 +785,7 @@ function CollectionModal({ onClose, onSaved, edit }: { onClose: () => void; onSa
   }
 
   return (
-    <ModalWrap title={edit ? "Редагувати предмет" : "Додати до колекції"} onClose={onClose}>
+    <Modal size="md" title={edit ? "Редагувати предмет" : "Додати до колекції"} onClose={onClose}>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {COL_CATS.map(c => (
           <button key={c} onClick={() => upd("category", c)} className={`flex items-center gap-1.5 py-2 px-2 rounded-xl border text-xs font-medium transition-all ${f.category === c ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30 text-orange-500" : "border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
@@ -858,7 +823,7 @@ function CollectionModal({ onClose, onSaved, edit }: { onClose: () => void; onSa
       <button className={btnPrimary} onClick={save} disabled={saving}>
         {saving ? <><Icon d={icons.loader} className="w-4 h-4 animate-spin" />Зберігаємо...</> : edit ? "Зберегти" : "Додати"}
       </button>
-    </ModalWrap>
+    </Modal>
   );
 }
 
@@ -879,9 +844,9 @@ function CollectionsTab({ collections, onReload }: { collections: Collection[]; 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <StatCard label="Предметів у колекції" value={String(owned.length)} />
-        <StatCard label="Вкладено" value={fmt(totalCost)} />
-        <StatCard label="Нереалізований прибуток" value={fmt(Math.abs(totalProfit))} sub={totalCost > 0 ? pct(totalProfit / totalCost * 100) : ""} color={totalProfit >= 0 ? "text-green-500" : "text-red-500"} />
+        <NumStat label="Предметів у колекції" value={String(owned.length)} />
+        <NumStat label="Вкладено" value={fmt(totalCost)} />
+        <NumStat label="Нереалізований прибуток" value={fmt(Math.abs(totalProfit))} sub={totalCost > 0 ? pct(totalProfit / totalCost * 100) : ""} color={totalProfit >= 0 ? "text-green-500" : "text-red-500"} />
       </div>
       <div className="flex gap-2 flex-wrap">
         {categories.map(c => (
@@ -956,10 +921,10 @@ function PortfolioTab({ stocks, bonds, realestate, businesses, collections }: { 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Загальний портфель" value={fmt(total)} color="text-orange-500" />
-        <StatCard label="P&L загальний" value={fmt(Math.abs(totalPnL))} sub={totalCost > 0 ? pct(totalPnL / totalCost * 100) : ""} color={totalPnL >= 0 ? "text-green-500" : "text-red-500"} />
-        <StatCard label="Акції & ETF" value={fmt(stocksValue)} sub={stocksCost > 0 ? pct((stocksValue - stocksCost) / stocksCost * 100) : ""} />
-        <StatCard label="Нерухомість" value={fmt(reValue)} sub={reCost > 0 ? pct((reValue - reCost) / reCost * 100) : ""} />
+        <NumStat label="Загальний портфель" value={fmt(total)} color="text-orange-500" />
+        <NumStat label="P&L загальний" value={fmt(Math.abs(totalPnL))} sub={totalCost > 0 ? pct(totalPnL / totalCost * 100) : ""} color={totalPnL >= 0 ? "text-green-500" : "text-red-500"} />
+        <NumStat label="Акції & ETF" value={fmt(stocksValue)} sub={stocksCost > 0 ? pct((stocksValue - stocksCost) / stocksCost * 100) : ""} />
+        <NumStat label="Нерухомість" value={fmt(reValue)} sub={reCost > 0 ? pct((reValue - reCost) / reCost * 100) : ""} />
       </div>
 
       {classes.length > 0 && (
@@ -985,7 +950,7 @@ function PortfolioTab({ stocks, bonds, realestate, businesses, collections }: { 
       )}
 
       <div className="flex items-center gap-3 p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30">
-        <Icon d={icons.trend} className="w-5 h-5 text-blue-500 shrink-0" />
+        <Icon d={icons.trendUp} className="w-5 h-5 text-blue-500 shrink-0" />
         <div>
           <p className="text-sm font-medium text-blue-700 dark:text-blue-400">Синхронізація</p>
           <p className="text-xs text-blue-500 mt-0.5">Крипто та метали — через Рахунки · Оренда та дивіденди — через Транзакції</p>

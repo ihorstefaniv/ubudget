@@ -46,14 +46,7 @@ function delta(curr: number, prev: number) {
 }
 const MONTHS = ["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
 
-const extraIcons = {
-  chevDown:  "M19 9l-7 7-7-7",
-  chevRight: "M9 5l7 7-7 7",
-  chevLeft:  "M15 19l-7-7 7-7",
-  copy:      "M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z",
-  drag:      "M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01",
-  lock:      "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z",
-};
+// extraIcons видалено — всі іконки тепер у icons з @/components/ui
 const EMOJIS = ["🛒","☕","⛽","🚗","💊","💡","👔","🏠","🎮","✈️","📚","💪","🐾","🎁","💈","🎨","🍔","🍕","🛍","🏋️","🎭","🎵","🌿","🔧","🏦","📱","💻","🎓","🏥","🍷","🧴","🎯","🚿","🛁","🪴"];
 
 function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string) => void }) {
@@ -198,7 +191,7 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, topNoteMap, not
 
           <div className="flex items-center gap-2.5 min-w-0">
             {hasNotes
-              ? <Icon d={isExp ? extraIcons.chevDown : extraIcons.chevRight} className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
+              ? <Icon d={isExp ? icons.chevDown : icons.chevRight} className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
               : <div className="w-3.5" />}
             <span className="text-base shrink-0">{r.emoji}</span>
             <div className="min-w-0">
@@ -227,7 +220,7 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, topNoteMap, not
                 title="Визначено конвертом">
                 {fmt(effectivePlan)}
                 <svg className="w-3 h-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={extraIcons.lock} />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icons.lock} />
                 </svg>
               </span>
             ) : (
@@ -290,7 +283,7 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, topNoteMap, not
           <div className="flex-1">
             <p className="text-sm font-semibold text-orange-700 dark:text-orange-400">Метод конвертів активний</p>
             <p className="text-xs text-orange-600/70 dark:text-orange-500/70 mt-0.5">
-              Категорії з обов'язкових конвертів мають locked план <svg className="w-3 h-3 inline opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={extraIcons.lock} /></svg>. Тижневий конверт — агрегований ліміт без розбивки.
+              Категорії з обов'язкових конвертів мають locked план <svg className="w-3 h-3 inline opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icons.lock} /></svg>. Тижневий конверт — агрегований ліміт без розбивки.
             </p>
           </div>
         </div>
@@ -402,7 +395,7 @@ function BudgetTab({ factMap, prevFactMap, planMap, merchantMap, topNoteMap, not
         {hiddenCount > 0 && (
           <button onClick={() => setShowAllExpense(v => !v)}
             className="w-full py-2.5 text-xs text-neutral-400 hover:text-orange-400 border-t border-neutral-100 dark:border-neutral-800 transition-colors flex items-center justify-center gap-1.5">
-            <Icon d={showAllExpense ? extraIcons.chevDown : extraIcons.chevRight} className="w-3.5 h-3.5" />
+            <Icon d={showAllExpense ? icons.chevDown : icons.chevRight} className="w-3.5 h-3.5" />
             {showAllExpense ? "Сховати порожні категорії" : `Показати всі (ще ${hiddenCount} без даних)`}
           </button>
         )}
@@ -508,7 +501,7 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
   const [saving, setSaving]               = useState(false);
   const [newCat, setNewCat]               = useState({ name: "", icon: "📦", type: "variable" as CategoryType, txKey: "" });
 
-  const inp = "px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm focus:outline-none focus:border-orange-300 transition-all";
+  const inp = "px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:border-orange-400 transition-all";
 
   async function updateCat(id: string, patch: Partial<DBCategory>) {
     await supabase.from("categories").update(patch).eq("id", id);
@@ -659,7 +652,7 @@ function CategoriesTab({ categories, onReload }: { categories: Category[]; onRel
         {categories.map(cat => (
           <Card key={cat.id}>
             <div className="flex items-center gap-3 px-4 py-3.5">
-              <Icon d={extraIcons.drag} className="w-4 h-4 text-neutral-300 cursor-grab shrink-0" />
+              <Icon d={icons.drag} className="w-4 h-4 text-neutral-300 cursor-grab shrink-0" />
               <EmojiPicker value={cat.icon} onChange={e => updateCat(cat.id, { icon: e })} />
               <div className="flex-1 min-w-0">
                 {editingId === cat.id ? (
@@ -1043,19 +1036,19 @@ export default function BudgetPage() {
         <Card className="flex items-center gap-1 px-3 py-2">
           <button onClick={() => { if (monthIdx === 0) { setMonthIdx(11); setYear(y => y - 1); } else setMonthIdx(m => m - 1); }}
             className="w-7 h-7 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center justify-center transition-colors text-neutral-400">
-            <Icon d={extraIcons.chevLeft} className="w-4 h-4" />
+            <Icon d={icons.chevLeft} className="w-4 h-4" />
           </button>
           <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 px-2 min-w-[130px] text-center">
             {MONTHS[monthIdx]} {year}
           </p>
           <button onClick={() => { if (monthIdx === 11) { setMonthIdx(0); setYear(y => y + 1); } else setMonthIdx(m => m + 1); }}
             className="w-7 h-7 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center justify-center transition-colors text-neutral-400">
-            <Icon d={extraIcons.chevRight} className="w-4 h-4" />
+            <Icon d={icons.chevRight} className="w-4 h-4" />
           </button>
           <div className="w-px h-5 bg-neutral-100 dark:bg-neutral-800 mx-1" />
           <button onClick={copyPlan}
             className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-orange-400 transition-colors">
-            <Icon d={extraIcons.copy} className="w-3.5 h-3.5" /><span className="hidden sm:inline">Копіювати план</span>
+            <Icon d={icons.copy} className="w-3.5 h-3.5" /><span className="hidden sm:inline">Копіювати план</span>
           </button>
           <div className="w-px h-5 bg-neutral-100 dark:bg-neutral-800 mx-1" />
           <button onClick={cleanBudgets} disabled={seeding}
@@ -1090,7 +1083,7 @@ export default function BudgetPage() {
               </div>
               <button onClick={copyPlan}
                 className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-all">
-                <Icon d={extraIcons.copy} className="w-3.5 h-3.5" />
+                <Icon d={icons.copy} className="w-3.5 h-3.5" />
                 Скопіювати з минулого
               </button>
             </div>

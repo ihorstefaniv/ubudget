@@ -16,13 +16,13 @@ import React from "react";
 // ─── Базові стилі ─────────────────────────────────────────────
 
 /** Стиль поля — нормальний стан */
-const INPUT_BASE = "w-full px-3 py-2.5 rounded-xl border bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none transition-all";
+const INPUT_BASE = "w-full px-3 py-2.5 rounded-xl border bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-none transition-all";
 
 /** Стиль поля — нормальний бордер */
-const INPUT_NORMAL = "border-neutral-200 dark:border-neutral-700 focus:border-orange-300 dark:focus:border-orange-600";
+const INPUT_NORMAL = "border-neutral-300 dark:border-neutral-600 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 dark:focus:border-orange-500 dark:focus:ring-orange-500/10";
 
 /** Стиль поля — помилка */
-const INPUT_ERROR = "border-red-300 dark:border-red-700 focus:border-red-400 bg-red-50/30 dark:bg-red-950/10";
+const INPUT_ERROR = "border-red-400 dark:border-red-600 focus:border-red-400 focus:ring-2 focus:ring-red-400/10 bg-red-50/40 dark:bg-red-950/10";
 
 // ─── Input ────────────────────────────────────────────────────
 

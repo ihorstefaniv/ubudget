@@ -11,11 +11,7 @@ function fmt(n: number, cur = "UAH") {
   return `${v} грн`;
 }
 
-const extraIcons = {
-  bell:  "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9",
-  trend: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
-  check: "M5 13l4 4L19 7",
-};
+// extraIcons видалено — bell/trendUp/check тепер у icons з @/components/ui
 
 type Tab = "credits" | "deposits" | "archive";
 type CreditType = "consumer" | "car" | "mortgage" | "credit_card" | "installment" | "partpay";
@@ -103,7 +99,7 @@ const TYPE_META: Record<CreditType, { label: string; emoji: string }> = {
 };
 
 // ─── UI primitives ────────────────────────────────────────────
-const inp    = "w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all";
+const inp    = "w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 dark:focus:border-orange-500 transition-all";
 const inpErr = "w-full px-3 py-2.5 rounded-xl border border-red-400 bg-red-50/40 dark:bg-red-950/10 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-red-400 transition-all";
 
 function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
@@ -809,7 +805,7 @@ function CreditsTab({ credits, accounts, onReload }: { credits: Credit[]; accoun
         <div className="space-y-2">
           {upcoming.map(c => (
             <div key={c.id} className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
-              <Icon d={extraIcons.bell} className="w-5 h-5 text-amber-500 shrink-0" />
+              <Icon d={icons.bell} className="w-5 h-5 text-amber-500 shrink-0" />
               <div className="flex-1">
                 <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
                   Платіж через {daysUntilPayment(c.payment_day!)} дн.: {c.name}
@@ -995,7 +991,7 @@ function DepositsTab({ deposits, accounts, onReload }: { deposits: Deposit[]; ac
         <Card className="p-5">
           <div className="flex items-start gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${avgRate >= NBU_RATE ? "bg-green-100 dark:bg-green-950/30" : "bg-amber-100 dark:bg-amber-950/20"}`}>
-              <Icon d={extraIcons.trend} className={`w-5 h-5 ${avgRate >= NBU_RATE ? "text-green-500" : "text-amber-500"}`} />
+              <Icon d={icons.trendUp} className={`w-5 h-5 ${avgRate >= NBU_RATE ? "text-green-500" : "text-amber-500"}`} />
             </div>
             <div>
               <p className={`text-sm font-semibold ${avgRate >= NBU_RATE ? "text-green-600 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`}>
@@ -1011,7 +1007,7 @@ function DepositsTab({ deposits, accounts, onReload }: { deposits: Deposit[]; ac
 
       {closingSoon.map(d => (
         <div key={d.id} className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
-          <Icon d={extraIcons.bell} className="w-5 h-5 text-amber-500 shrink-0" />
+          <Icon d={icons.bell} className="w-5 h-5 text-amber-500 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Депозит закінчується через {daysUntil(d.end_date!)} дн.: {d.name}</p>
             <p className="text-xs text-amber-600">{d.bank} · {fmt(Number(d.amount), d.currency)} · {d.interest_rate}%</p>
@@ -1182,7 +1178,7 @@ function ArchiveTab({ credits, deposits }: { credits: Credit[]; deposits: Deposi
               return (
                 <div key={d.id} className="flex items-center gap-4 px-5 py-4">
                   <div className="w-9 h-9 rounded-xl bg-green-50 dark:bg-green-950/20 flex items-center justify-center shrink-0">
-                    <Icon d={extraIcons.check} className="w-4 h-4 text-green-400" />
+                    <Icon d={icons.check} className="w-4 h-4 text-green-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{d.name}</p>

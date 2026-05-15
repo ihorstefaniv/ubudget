@@ -229,16 +229,16 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
                 type="number" value={amount}
                 onChange={e => setAmount(e.target.value)}
                 placeholder="0.00" autoFocus
-                className="flex-1 px-4 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-xl font-bold placeholder:text-neutral-300 focus:outline-none focus:border-orange-300 dark:focus:border-orange-700 transition-all"
+                className="flex-1 px-4 py-3 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-xl font-bold placeholder:text-neutral-300 focus:outline-none focus:border-orange-400 dark:focus:border-orange-700 transition-all"
               />
               {/* Якщо рахунок має власну валюту — блокуємо вибір, показуємо бейдж */}
               {accCurrency !== "UAH" ? (
-                <div className="px-3 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-sm font-medium min-w-[60px] text-center">
+                <div className="px-3 py-3 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-sm font-medium min-w-[60px] text-center">
                   {accCurrency}
                 </div>
               ) : (
                 <select value={currency} onChange={e => setCurrency(e.target.value)}
-                  className="px-3 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm font-medium focus:outline-none focus:border-orange-300 transition-all">
+                  className="px-3 py-3 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm font-medium focus:outline-none focus:border-orange-400 transition-all">
                   {CURRENCIES.map(c => <option key={c}>{c}</option>)}
                 </select>
               )}
@@ -255,7 +255,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
                     type="number" value={exchangeRate}
                     onChange={e => setExchangeRate(+e.target.value)}
                     step="0.01" min="0"
-                    className="w-24 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all"
+                    className="w-24 px-2 py-1 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-400 transition-all"
                   />
                   <span className="text-xs text-neutral-400">UAH</span>
                   <span className="text-[10px] text-neutral-300 dark:text-neutral-600 ml-auto shrink-0">
@@ -308,7 +308,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
                 Підкатегорія <span className="text-neutral-400 font-normal">(опційно)</span>
               </label>
               <select value={subcategoryId} onChange={e => setSubcategoryId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-400 transition-all">
                 <option value="">— не вказано —</option>
                 {subcategories.map(s => (
                   <option key={s.id} value={s.id}>
@@ -335,7 +335,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
                 </div>
               ) : (
                 <select value={accountId} onChange={e => setAccountId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
+                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-400 transition-all">
                   {accounts.map(a => (
                     <option key={a.id} value={a.id}>
                       {a.icon ? `${a.icon} ` : ""}{a.name} ({a.currency})
@@ -349,7 +349,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">На рахунок *</label>
                 <select value={toAccountId} onChange={e => setToAccountId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
+                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-400 transition-all">
                   {accounts.filter(a => a.id !== accountId).map(a => (
                     <option key={a.id} value={a.id}>
                       {a.icon ? `${a.icon} ` : ""}{a.name} ({a.currency})
@@ -368,7 +368,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
               </label>
               <input value={merchantName} onChange={e => setMerchantName(e.target.value)}
                 placeholder="Сільпо, АТБ, Rozetka..."
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm placeholder:text-neutral-400 focus:outline-none focus:border-orange-300 transition-all" />
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm placeholder:text-neutral-400 focus:outline-none focus:border-orange-400 transition-all" />
             </div>
           )}
 
@@ -377,12 +377,12 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Дата</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all" />
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-400 transition-all" />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Нотатка</label>
               <input value={note} onChange={e => setNote(e.target.value)} placeholder="Опис..."
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm placeholder:text-neutral-400 focus:outline-none focus:border-orange-300 transition-all" />
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm placeholder:text-neutral-400 focus:outline-none focus:border-orange-400 transition-all" />
             </div>
           </div>
 
@@ -393,7 +393,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
             </label>
             {photo ? (
               <div className="relative">
-                <img src={photo} alt="Чек" className="w-full h-32 object-cover rounded-xl border border-neutral-200 dark:border-neutral-700" />
+                <img src={photo} alt="Чек" className="w-full h-32 object-cover rounded-xl border border-neutral-300 dark:border-neutral-600" />
                 <button onClick={() => setPhoto(null)}
                   className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors">
                   <Icon d={icons.close} className="w-3.5 h-3.5" />
@@ -401,7 +401,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
               </div>
             ) : (
               <button onClick={() => fileRef.current?.click()}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-400 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-400 transition-all text-sm">
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-neutral-300 dark:border-neutral-600 text-neutral-400 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-400 transition-all text-sm">
                 <Icon d={icons.plus} className="w-4 h-4" />
                 Додати фото чеку
               </button>
@@ -428,7 +428,7 @@ function AddModal({ onClose, onSave, editTx, accounts, subcategories }: {
                       className={`py-2 rounded-lg text-sm font-medium transition-all ${
                         repeatPeriod === p
                           ? "bg-orange-100 dark:bg-orange-950/30 text-orange-500"
-                          : "bg-white dark:bg-neutral-800 text-neutral-500 border border-neutral-200 dark:border-neutral-700"
+                          : "bg-white dark:bg-neutral-800 text-neutral-500 border border-neutral-300 dark:border-neutral-600"
                       }`}>
                       {p === "monthly" ? "Щомісяця" : "Щотижня"}
                     </button>
@@ -805,7 +805,7 @@ export default function TransactionsPage() {
           <input
             value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Пошук за назвою, категорією, рахунком..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:border-orange-300 dark:focus:border-orange-700 transition-all"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:border-orange-400 dark:focus:border-orange-700 transition-all"
           />
         </div>
         <div className="flex gap-2 flex-wrap items-center">
@@ -823,14 +823,14 @@ export default function TransactionsPage() {
           </div>
           {accounts.length > 0 && (
             <select value={filterAccount} onChange={e => setFilterAccount(e.target.value)}
-              className="px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 focus:outline-none focus:border-orange-300 transition-all">
+              className="px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 focus:outline-none focus:border-orange-400 transition-all">
               <option value="all">Всі рахунки</option>
               {accounts.filter(a => !a.is_archived).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           )}
           {(filterType === "expense" || filterType === "income") && (
             <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
-              className="px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 focus:outline-none focus:border-orange-300 transition-all">
+              className="px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 focus:outline-none focus:border-orange-400 transition-all">
               <option value="all">Всі категорії</option>
               {(filterType === "expense" ? CATEGORIES.expense : CATEGORIES.income).map(c => (
                 <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>

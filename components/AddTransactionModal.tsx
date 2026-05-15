@@ -208,15 +208,15 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
                 type="number" value={amount}
                 onChange={e => setAmount(e.target.value)}
                 placeholder="0.00" autoFocus
-                className="flex-1 px-4 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-xl font-bold placeholder:text-neutral-300 focus:outline-none focus:border-orange-300 dark:focus:border-orange-700 transition-all"
+                className="flex-1 px-4 py-3 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-xl font-bold placeholder:text-neutral-300 focus:outline-none focus:border-orange-400 dark:focus:border-orange-500 transition-all"
               />
               {fromAccount && fromAccount.currency !== "UAH" ? (
-                <div className="px-3 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-sm font-medium min-w-[60px] text-center">
+                <div className="px-3 py-3 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-sm font-medium min-w-[60px] text-center">
                   {fromAccount.currency}
                 </div>
               ) : (
                 <select value={currency} onChange={e => setCurrency(e.target.value)}
-                  className="px-3 py-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm font-medium focus:outline-none focus:border-orange-300 transition-all">
+                  className="px-3 py-3 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm font-medium focus:outline-none focus:border-orange-400 transition-all">
                   {CURRENCIES.map(c => <option key={c}>{c}</option>)}
                 </select>
               )}
@@ -231,7 +231,7 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
                     type="number" value={exchangeRate}
                     onChange={e => setExchangeRate(+e.target.value)}
                     step="0.01" min="0"
-                    className="w-24 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-300 transition-all"
+                    className="w-24 px-2 py-1 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-orange-400 transition-all"
                   />
                   <span className="text-xs text-neutral-400">UAH</span>
                   <span className="text-[10px] text-neutral-300 dark:text-neutral-600 ml-auto shrink-0">
@@ -295,7 +295,7 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
                 </div>
               ) : (
                 <select value={accountId} onChange={e => setAccountId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
+                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-400 transition-all">
                   {accounts.map(a => (
                     <option key={a.id} value={a.id}>
                       {a.icon ? `${a.icon} ` : ""}{a.name} ({a.currency})
@@ -308,7 +308,7 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">На рахунок *</label>
                 <select value={toAccountId} onChange={e => setToAccountId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all">
+                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-400 transition-all">
                   {accounts.filter(a => a.id !== accountId).map(a => (
                     <option key={a.id} value={a.id}>
                       {a.icon ? `${a.icon} ` : ""}{a.name} ({a.currency})
@@ -324,12 +324,12 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Дата</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-300 transition-all" />
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm focus:outline-none focus:border-orange-400 transition-all" />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Нотатка</label>
               <input value={note} onChange={e => setNote(e.target.value)} placeholder="Опис..."
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm placeholder:text-neutral-400 focus:outline-none focus:border-orange-300 transition-all" />
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 text-sm placeholder:text-neutral-400 focus:outline-none focus:border-orange-400 transition-all" />
             </div>
           </div>
 
@@ -341,7 +341,7 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
             {photo ? (
               <div className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo} alt="Чек" className="w-full h-32 object-cover rounded-xl border border-neutral-200 dark:border-neutral-700" />
+                <img src={photo} alt="Чек" className="w-full h-32 object-cover rounded-xl border border-neutral-300 dark:border-neutral-600" />
                 <button onClick={() => setPhoto(null)}
                   className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors">
                   <Icon d={icons.close} className="w-3.5 h-3.5" />
@@ -349,7 +349,7 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
               </div>
             ) : (
               <button onClick={() => fileRef.current?.click()}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-neutral-200 dark:border-neutral-700 text-neutral-400 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-400 transition-all text-sm">
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-neutral-300 dark:border-neutral-600 text-neutral-400 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-400 transition-all text-sm">
                 <Icon d={icons.plus} className="w-4 h-4" />
                 Додати фото чеку
               </button>
@@ -375,7 +375,7 @@ export default function AddTransactionModal({ onClose, onSaved }: Props) {
                     className={`py-2 rounded-lg text-sm font-medium transition-all ${
                       repeatPeriod === p
                         ? "bg-orange-100 dark:bg-orange-950/30 text-orange-500"
-                        : "bg-white dark:bg-neutral-800 text-neutral-500 border border-neutral-200 dark:border-neutral-700"
+                        : "bg-white dark:bg-neutral-800 text-neutral-500 border border-neutral-300 dark:border-neutral-600"
                     }`}>
                     {p === "monthly" ? "Щомісяця" : "Щотижня"}
                   </button>

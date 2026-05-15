@@ -22,9 +22,63 @@
 - app/(landing)/ — публічна частина
 - app/(landing)/free/tools/ — публічні калькулятори
 
+## UI-бібліотека — `components/ui/`
+
+Єдина точка входу для всіх UI-примітивів:
+```ts
+import { Button, Input, Select, Textarea, Modal, Card, CardHeader, StatCard, InfoBox,
+         Toggle, ToggleRow, Badge, ProgressBar, Spinner, PageLoader,
+         Checkbox, CheckboxRow, Tabs, EmptyState,
+         Icon, icons } from "@/components/ui";
+```
+
+### Компоненти
+
+| Компонент | Файл | Варіанти / пропси |
+|-----------|------|-------------------|
+| `Button` | Button.tsx | variant: primary/secondary/danger/ghost; size: sm/md/lg; loading, icon, fullWidth |
+| `Input` | Input.tsx | label, error, hint, suffix |
+| `Select` | Input.tsx | label, error, hint, options[], placeholder |
+| `Textarea` | Input.tsx | label, error, hint |
+| `Modal` | Modal.tsx | title, onClose, size: sm/md/lg, disableOverlayClose |
+| `Card` | Card.tsx | noPadding, className |
+| `CardHeader` | Card.tsx | title, action, icon |
+| `StatCard` | Card.tsx | label, value, sub, color: green/red/orange/blue/purple/neutral, icon, emoji |
+| `InfoBox` | Card.tsx | variant: orange/blue/green/red/amber |
+| `Toggle` | Toggle.tsx | checked, onChange, disabled, size: sm/md |
+| `ToggleRow` | Toggle.tsx | label, desc, checked, onChange, disabled, size |
+| `Badge` | Badge.tsx | color: green/red/orange/blue/purple/amber/neutral, pulse |
+| `ProgressBar` | Badge.tsx | value, max, color, height: sm/md |
+| `Spinner` | Badge.tsx | size: sm/md/lg |
+| `PageLoader` | Badge.tsx | — |
+| `Checkbox` | Checkbox.tsx | checked, onChange, disabled, size: sm/md |
+| `CheckboxRow` | Checkbox.tsx | label, desc, checked, onChange, disabled, size |
+| `Tabs` | Tabs.tsx | tabs: \{id, label, icon?, count?\}[], active, onChange, variant: pills/underline |
+| `EmptyState` | EmptyState.tsx | emoji, title, desc, action, compact |
+| `Icon` | Icon.tsx | d (SVG path), className |
+
+### Іконки — `icons.{назва}`
+
+Всі SVG-іконки в `Icon.tsx`. Додавати нові — ТІЛЬКИ туди, не в сторінки.
+
+Доступні: `plus, close, edit, trash, save, copy, search, filter, drag, download, refresh, chevLeft, chevRight, chevDown, chevUp, externalLink, check, warn, info, loader, arrowRight, wallet, bank, trendUp, trendDown, coin, creditCard, envelope, lock, spark, carry, bell, settings, clock, calendar, sun, moon, user, logout, menu, home, chart, bag, doc`
+
+### Форматування — `lib/format.ts`
+
+```ts
+import { fmt, pct, dateLabel, startOfPeriod, uid, monthsLeft } from "@/lib/format";
+fmt(1234.5)              // "1 234,50 грн"  (decimals=2 за замовчуванням)
+fmt(5000, "USD", 0)      // "$5 000"
+pct(12.5)                // "+12.5%"
+dateLabel("2026-05-15")  // "Сьогодні"
+```
+
+**ВАЖЛИВО**: `fmt()` має `decimals=2` за замовчуванням. Для відображення цілих сум — `fmt(n, cur, 0)`.
+
 ## Правила
-- Не дублюй код — імпортуй компоненти
-- Використовуй raw <select> замість UI Select
+- **Ніколи** не оголошуй локально: `Icon`, `icons`, `inp`, `btnPrimary`, `StatCard`, `ModalWrap`, `Toggle`, `fmt` — тільки імпорт з ui або lib/format
+- **Ніколи** не додавай іконки локально (`extraIcons`, `const icons = {...}`) — додай в `Icon.tsx`
+- Кожен новий UI-патерн що повторюється 2+ рази → компонент у `components/ui/`
 - Next.js 15: params і searchParams — async
 - Курси валют: завжди використовувати fetchNbuRates() + rateFor(), НЕ хардкодити
 - Баланс рахунків: оновлюється DB-тригером sync_account_balance, НЕ client-side

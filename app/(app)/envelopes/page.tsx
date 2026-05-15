@@ -57,15 +57,8 @@ const CATEGORY_EMOJIS: Record<string, string> = {
   subscriptions: "📱", pets: "🐾", other: "📦",
 };
 
-const extraIcons = {
-  chevDown:  "M19 9l-7 7-7-7",
-  chevRight: "M9 5l7 7-7 7",
-  check:     "M5 13l4 4L19 7",
-  warn:      "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
-  spark:     "M13 10V3L4 14h7v7l9-11h-7z",
-  carry:     "M17 8l4 4m0 0l-4 4m4-4H3",
-  lock:      "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z",
-};
+// extraIcons видалено — всі в icons з @/components/ui
+// carry тут = стрілка вправо (arrowRight), відрізняється від icons.carry (подвійна стрілка)
 
 // ─── ACTIVATION SCREEN ────────────────────────────────────────
 function ActivationScreen({ onActivate }: { onActivate: () => void }) {
@@ -104,7 +97,7 @@ function ActivationScreen({ onActivate }: { onActivate: () => void }) {
               </div>
               <div className={`w-5 h-5 rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center transition-all ${
                 step === i || i < step ? "border-orange-400 bg-orange-400" : "border-neutral-200 dark:border-neutral-700"}`}>
-                {(step === i || i < step) && <Icon d={extraIcons.check} className="w-3 h-3 text-white" />}
+                {(step === i || i < step) && <Icon d={icons.check} className="w-3 h-3 text-white" />}
               </div>
             </div>
           ))}
@@ -123,7 +116,7 @@ function ActivationScreen({ onActivate }: { onActivate: () => void }) {
           ) : (
             <button onClick={onActivate}
               className="flex-1 py-4 rounded-2xl bg-gradient-to-r from-orange-400 to-amber-400 text-white font-bold text-lg hover:from-orange-500 hover:to-amber-500 active:scale-95 transition-all shadow-lg shadow-orange-200 dark:shadow-none flex items-center justify-center gap-2">
-              <Icon d={extraIcons.spark} className="w-5 h-5" />
+              <Icon d={icons.spark} className="w-5 h-5" />
               Активувати метод конвертів!
             </button>
           )}
@@ -394,7 +387,7 @@ function EnvelopesMain({ month, year, onDeactivate }: { month: number; year: num
       {/* Warnings */}
       {totalIncome === 0 && (
         <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
-          <Icon d={extraIcons.warn} className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <Icon d={icons.warn} className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Доходів ще не зафіксовано</p>
             <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">Тижневий бюджет розраховується автоматично після надходження income-транзакцій.</p>
@@ -403,7 +396,7 @@ function EnvelopesMain({ month, year, onDeactivate }: { month: number; year: num
       )}
       {totalIncome > 0 && disposable < 0 && (
         <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
-          <Icon d={extraIcons.warn} className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <Icon d={icons.warn} className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-red-700 dark:text-red-400">Обов'язкові перевищують дохід</p>
             <p className="text-xs text-red-600 dark:text-red-500 mt-0.5">Дохід {fmt(totalIncome)} — обов'язкові {fmt(totalMandatory)} = дефіцит {fmt(Math.abs(disposable))}</p>
@@ -598,8 +591,8 @@ function EnvelopesMain({ month, year, onDeactivate }: { month: number; year: num
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <p className="text-xs text-neutral-400">Бюджет {fmt(weeklyBudget)}</p>
-                        {w.carryIn > 0 && <span className="flex items-center gap-1 text-xs text-green-500 font-medium"><Icon d={extraIcons.carry} className="w-3 h-3" />+{fmt(w.carryIn)} перехід</span>}
-                        {w.carryIn < 0 && <span className="flex items-center gap-1 text-xs text-red-400 font-medium"><Icon d={extraIcons.carry} className="w-3 h-3" />{fmt(w.carryIn)} дефіцит</span>}
+                        {w.carryIn > 0 && <span className="flex items-center gap-1 text-xs text-green-500 font-medium"><Icon d={icons.arrowRight} className="w-3 h-3" />+{fmt(w.carryIn)} перехід</span>}
+                        {w.carryIn < 0 && <span className="flex items-center gap-1 text-xs text-red-400 font-medium"><Icon d={icons.arrowRight} className="w-3 h-3" />{fmt(w.carryIn)} дефіцит</span>}
                       </div>
                     </div>
                   </div>
@@ -610,7 +603,7 @@ function EnvelopesMain({ month, year, onDeactivate }: { month: number; year: num
                       </p>
                       <p className="text-xs text-neutral-400">{isOver ? "перевищення" : isFuture ? "прогноз" : "залишок"}</p>
                     </div>
-                    <Icon d={isOpen ? extraIcons.chevDown : extraIcons.chevRight} className="w-4 h-4 text-neutral-300" />
+                    <Icon d={isOpen ? icons.chevDown : icons.chevRight} className="w-4 h-4 text-neutral-300" />
                   </div>
                 </div>
                 {!isFuture && (

@@ -25,8 +25,14 @@ export { Card, CardHeader, StatCard, InfoBox } from "./Card";
 // Перемикач
 export { Toggle, ToggleRow } from "./Toggle";
 
-// Бейджі, прогрес, спінер — розбито окремо щоб уникнути конфліктів
-export { Badge } from "./Badge";
-export { ProgressBar } from "./Badge";
-export { Spinner } from "./Badge";
-export { PageLoader } from "./Badge";
+// Бейджі, прогрес, спінер
+export { Badge, ProgressBar, Spinner, PageLoader } from "./Badge";
+
+// Чекбокс
+export { Checkbox, CheckboxRow } from "./Checkbox";
+
+// Таб-навігація
+export { Tabs } from "./Tabs";
+
+// Порожній стан
+export { EmptyState } from "./EmptyState";

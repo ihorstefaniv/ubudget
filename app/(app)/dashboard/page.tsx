@@ -45,13 +45,7 @@ const ACC_ICONS: Record<string, string> = {
   installment: "🛍", mortgage: "🏠", property: "🏘", crypto: "₿", collections: "🎯",
 };
 
-// ─── Extra icons (не в бібліотеці) ───────────────────────────
-const extraIcons = {
-  clock: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
-  chart: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
-  bag:   "M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z",
-  trend: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
-};
+// extraIcons видалено — clock/chart/bag/trendUp тепер у icons з @/components/ui
 
 // ─── Health Score Ring ────────────────────────────────────────
 function HealthRing({ score }: { score: number }) {
@@ -287,7 +281,7 @@ export default function DashboardPage() {
             : daysNoIncome > 30 ? "bg-amber-50 dark:bg-amber-950/30 text-amber-500"
             : "bg-green-50 dark:bg-green-950/30 text-green-500"
           }`}>
-            <Icon d={extraIcons.clock} className="w-4 h-4" />
+            <Icon d={icons.clock} className="w-4 h-4" />
           </div>
           <p className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">
             {daysNoIncome !== null ? `${daysNoIncome} днів` : "—"}
@@ -301,7 +295,7 @@ export default function DashboardPage() {
         {/* Бюджет план/факт */}
         <Card className="p-5">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-orange-50 dark:bg-orange-950/30 text-orange-500">
-            <Icon d={extraIcons.chart} className="w-4 h-4" />
+            <Icon d={icons.chart} className="w-4 h-4" />
           </div>
           {budgetPlan > 0 ? (
             <>
@@ -333,7 +327,7 @@ export default function DashboardPage() {
         {/* Топ категорія */}
         <Card className="p-5">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-orange-50 dark:bg-orange-950/30 text-orange-500">
-            <Icon d={extraIcons.bag} className="w-4 h-4" />
+            <Icon d={icons.bag} className="w-4 h-4" />
           </div>
           {topCat ? (
             <>
