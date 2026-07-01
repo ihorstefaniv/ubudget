@@ -1,0 +1,65 @@
+import React from "react";
+
+const INPUT_BASE   = "w-full px-3 py-2.5 rounded-xl border bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-none transition-all";
+const INPUT_NORMAL = "border-neutral-300 dark:border-neutral-600 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 dark:focus:border-orange-500 dark:focus:ring-orange-500/10";
+const INPUT_ERROR  = "border-red-400 dark:border-red-600 focus:border-red-400 focus:ring-2 focus:ring-red-400/10 bg-red-50/40 dark:bg-red-950/10";
+
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?:  string;
+  error?:  string;
+  hint?:   string;
+  suffix?: React.ReactNode;
+}
+
+export function Input({ label, error, hint, suffix, className = "", ...props }: InputProps) {
+  return (
+    <div className="w-full">
+      {label && <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1.5">{label}</label>}
+      <div className="relative">
+        <input className={[INPUT_BASE, error ? INPUT_ERROR : INPUT_NORMAL, suffix ? "pr-16" : "", className].filter(Boolean).join(" ")} {...props} />
+        {suffix && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400 font-medium pointer-events-none">{suffix}</div>}
+      </div>
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {!error && hint && <p className="mt-1 text-xs text-neutral-400">{hint}</p>}
+    </div>
+  );
+}
+
+interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  label?:       string;
+  error?:       string;
+  hint?:        string;
+  options:      { value: string; label: string }[];
+  placeholder?: string;
+}
+
+export function Select({ label, error, hint, options, placeholder, className = "", ...props }: SelectProps) {
+  return (
+    <div className="w-full">
+      {label && <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1.5">{label}</label>}
+      <select className={[INPUT_BASE, error ? INPUT_ERROR : INPUT_NORMAL, "cursor-pointer", className].filter(Boolean).join(" ")} {...props}>
+        {placeholder && <option value="">{placeholder}</option>}
+        {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {!error && hint && <p className="mt-1 text-xs text-neutral-400">{hint}</p>}
+    </div>
+  );
+}
+
+interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label?: string;
+  error?: string;
+  hint?:  string;
+}
+
+export function Textarea({ label, error, hint, className = "", ...props }: TextareaProps) {
+  return (
+    <div className="w-full">
+      {label && <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1.5">{label}</label>}
+      <textarea className={[INPUT_BASE, error ? INPUT_ERROR : INPUT_NORMAL, "resize-none", className].filter(Boolean).join(" ")} {...props} />
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {!error && hint && <p className="mt-1 text-xs text-neutral-400">{hint}</p>}
+    </div>
+  );
+}

@@ -1,30 +1,70 @@
-# UBudget Project
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Мова
 Завжди відповідай українською мовою.
 
-## Стек
-- Next.js 15, TypeScript, Tailwind v4, Supabase
-- UI компоненти: components/ui/
-- Auth: @supabase/ssr, lib/supabase/client.ts
-- Курси валют: lib/nbu-rates.ts (NBU API, fetchNbuRates, rateFor)
+## Команди
 
-## Структура
-- app/(app)/ — авторизована зона
-- app/(app)/dashboard — головна
-- app/(app)/accounts — рахунки
-- app/(app)/transactions — транзакції
-- app/(app)/credits — кредити і депозити (tabs)
-- app/(app)/budget — бюджет
-- app/(app)/envelopes — метод конвертів
-- app/(app)/investments — інвестиції
-- app/(app)/tools/ — інструменти (health, history, fuel-prices тощо)
-- app/(landing)/ — публічна частина
-- app/(landing)/free/tools/ — публічні калькулятори
+```bash
+npm run dev      # запустити dev-сервер
+npm run build    # production build
+npm run lint     # ESLint перевірка
+```
+
+Тестів немає. Перевірка — через `npm run build` і `npm run lint`.
+
+## Стек
+- Next.js 15 (App Router), TypeScript, Tailwind v4, Supabase
+- Деплой: Vercel (vercel.json містить cron-задачі)
+
+## Архітектура
+
+### Route groups
+- `app/(app)/` — авторизована зона. Layout `"use client"` — перевіряє auth через `supabase.auth.getUser()`, редіректить на `/login`. Навігація залежить від `profiles.modules`.
+- `app/(app)/admin/` — адмін-панель зі своїм layout (окремо від основного); доступ за `profiles.role`.
+- `app/(auth)/` — login/register (публічні).
+- `app/(landing)/` — публічна частина, включно з `free/tools/` — калькулятори без авторизації.
+- `app/api/` — API routes: `/api/nbu-rates`, `/api/fuel-prices`, `/api/geocode`, `/api/pwa-manifest`, `/api/sw`, cron-задачі в `/api/cron/`.
+
+### Supabase clients
+Два варіанти — **ніколи не плутати**:
+- `lib/supabase/client.ts` → `createClient()` — браузер (`createBrowserClient`)
+- `lib/supabase/server.ts` → `createClient()` — server components / API routes (`createServerClient` + `cookies()`)
+
+Auth-дії (signUp, signIn, signOut, getProfile) — в `lib/auth.ts`, використовують browser client.
+
+### Система модулів і фіч — два окремі механізми
+
+**1. Модулі** (`profiles.modules` jsonb) — керують **видимістю пунктів навігації**:
+- Ключі: `budget`, `credits`, `investments`, `envelopes`, `household`
+- Читаються в `app/(app)/layout.tsx` при завантаженні; `moduleKey: null` → пункт завжди видимий
+- Вмикаються/вимикаються в налаштуваннях юзера
+
+**2. Фіча-флаги** (`site_settings` таблиця) — керують **доступом до розділів** через `<FeatureGate>`:
+- Ключі: `feature_blog`, `feature_investments`, `feature_envelopes`, `feature_household`, `feature_collections`, `feature_tools`
+- Завантажуються через `FeaturesProvider` (в `lib/features-context.tsx`)
+- Адміни завжди бачать усі фічі незалежно від флагів
+- Обгорни сторінку: `<FeatureGate featureKey="feature_investments" label="Інвестиції">{children}</FeatureGate>`
+
+### Система ролей (`lib/permissions.ts`)
+Ролі: `user` → `admin` → `superadmin`. Зберігається в `profiles.role`.
+- `can(role, permission)` — статична перевірка (безпечно в middleware)
+- `canFrom(matrix, role)` — з DB-overrides (для UI компонентів)
+- Матриця дефолтних прав в `DEFAULT_PERMISSIONS` — перевизначається через `site_settings` key `"permissions_matrix"`
+
+### Cron-задачі (vercel.json)
+| Route | Розклад |
+|-------|---------|
+| `/api/cron/nbu-rates` | щодня 06:00 |
+| `/api/cron/fuel-prices` | щодня 01:00 |
+| `/api/cron/recurring` | щодня 06:00 |
+| `/api/cron/stock-prices` | будні 15:00 |
 
 ## UI-бібліотека — `components/ui/`
 
-Єдина точка входу для всіх UI-примітивів:
+Єдина точка входу:
 ```ts
 import { Button, Input, Select, Textarea, Modal, Card, CardHeader, StatCard, InfoBox,
          Toggle, ToggleRow, Badge, ProgressBar, Spinner, PageLoader,
@@ -59,7 +99,7 @@ import { Button, Input, Select, Textarea, Modal, Card, CardHeader, StatCard, Inf
 
 ### Іконки — `icons.{назва}`
 
-Всі SVG-іконки в `Icon.tsx`. Додавати нові — ТІЛЬКИ туди, не в сторінки.
+Всі SVG-іконки в `Icon.tsx`. Нові — **тільки туди**.
 
 Доступні: `plus, close, edit, trash, save, copy, search, filter, drag, download, refresh, chevLeft, chevRight, chevDown, chevUp, externalLink, check, warn, info, loader, arrowRight, wallet, bank, trendUp, trendDown, coin, creditCard, envelope, lock, spark, carry, bell, settings, clock, calendar, sun, moon, user, logout, menu, home, chart, bag, doc`
 
@@ -73,15 +113,16 @@ pct(12.5)                // "+12.5%"
 dateLabel("2026-05-15")  // "Сьогодні"
 ```
 
-**ВАЖЛИВО**: `fmt()` має `decimals=2` за замовчуванням. Для відображення цілих сум — `fmt(n, cur, 0)`.
+**ВАЖЛИВО**: `fmt()` має `decimals=2` за замовчуванням. Для цілих сум — `fmt(n, cur, 0)`.
 
 ## Правила
-- **Ніколи** не оголошуй локально: `Icon`, `icons`, `inp`, `btnPrimary`, `StatCard`, `ModalWrap`, `Toggle`, `fmt` — тільки імпорт з ui або lib/format
-- **Ніколи** не додавай іконки локально (`extraIcons`, `const icons = {...}`) — додай в `Icon.tsx`
-- Кожен новий UI-патерн що повторюється 2+ рази → компонент у `components/ui/`
-- Next.js 15: params і searchParams — async
-- Курси валют: завжди використовувати fetchNbuRates() + rateFor(), НЕ хардкодити
-- Баланс рахунків: оновлюється DB-тригером sync_account_balance, НЕ client-side
+- **Ніколи** не оголошуй локально: `Icon`, `icons`, `inp`, `btnPrimary`, `StatCard`, `ModalWrap`, `Toggle`, `fmt` — тільки імпорт з `@/components/ui` або `@/lib/format`
+- **Ніколи** не додавай іконки локально — тільки в `Icon.tsx`
+- Кожен UI-патерн що повторюється 2+ рази → компонент у `components/ui/`
+- Next.js 15: `params` і `searchParams` — **async** в server components
+- Курси валют: завжди `fetchNbuRates()` + `rateFor()` з `lib/nbu-rates.ts`, не хардкодити
+- Баланс рахунків: оновлюється DB-тригером `sync_account_balance`, **не** client-side
+- Категорії транзакцій: змінювати тільки в `lib/category-registry.ts`
 
 ## БД (Supabase) — ключові таблиці
 
@@ -116,26 +157,25 @@ dateLabel("2026-05-15")  // "Сьогодні"
 ### Системні
 | Таблиця | Призначення |
 |---------|-------------|
-| `profiles` | Профіль: modules(jsonb), notifications(jsonb), base_currency |
+| `profiles` | Профіль: modules(jsonb), notifications(jsonb), base_currency, role |
+| `site_settings` | Фіча-флаги та permissions_matrix (key/value) |
 | `exchange_rates` | Кеш курсів НБУ (є в БД, поки не використовується) |
 | `recurring_transactions` | Регулярні транзакції (є в БД, UI не реалізовано) |
-| `shocks` | Фінансові потрясіння (є в БД, UI не відомий) |
+| `shocks` | Фінансові потрясіння |
 | `fuel_prices_history` | Ціни на пальне |
 
-### Важливі поля accounts (для кредитної картки як рахунку)
-accounts вже має: `credit_limit`, `interest_rate`, `payment_day`, `end_date` — UI не використовує!
-
 ### Важливі особливості
-- `transactions.category_key` — рядковий ключ (хардкод в lib/category-registry.ts), НЕ FK
+- `transactions.category_key` — рядковий ключ (хардкод в `lib/category-registry.ts`), НЕ FK
 - `transactions.category_id` — FK до `categories` (не використовується в поточному UI)
-- `profiles.modules` — jsonb, джерело правди для активних модулів (НЕ user_modules таблиця)
+- `profiles.modules` — jsonb, керує навігацією (НЕ user_modules таблиця)
+- `profiles.role` — `user` | `admin` | `superadmin`, керує доступом до адмінки
 - `accounts.balance` — оновлюється тригером `sync_account_balance` при INSERT/UPDATE на transactions
 - `transactions.to_amount` — сума яку отримує to_account при переказі між різновалютними рахунками
-- `deposits` — не має FK на accounts (немає прямого зв'язку)
-- `credits` — не має FK на accounts (платіж через UI → expense транзакція)
+- `accounts` вже має `credit_limit`, `interest_rate`, `payment_day`, `end_date` — UI не використовує
+- `deposits` і `credits` — не мають FK на accounts
 
 ## Повна схема БД
-Файл: supabase/schema.csv (актуальна на 2026-05-08)
+Файл: `supabase/schema.csv` (актуальна на 2026-05-08)
 
 ## Детальний аналіз сутностей
-Файл: ENTITIES.md
+Файл: `ENTITIES.md`
