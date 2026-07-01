@@ -1,7 +1,3 @@
 {
-  "build": {
-    "env": {
-      "NEXT_PRIVATE_SKIP_TURBOPACK": "1"
-    }
-  }
+  "framework": "nextjs"
 }
