@@ -1,3 +1,4 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "installCommand": "npm install && cd .. && ln -sf erp/node_modules node_modules"
 }

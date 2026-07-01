@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
@@ -10,14 +9,6 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Turbopack scans from git root and finds proxy.ts (ubudget file). Pin @supabase/ssr
-  // and next/server to erp/node_modules so proxy.ts compiles without errors.
-  turbopack: {
-    resolveAlias: {
-      "@supabase/ssr": path.resolve(__dirname, "node_modules/@supabase/ssr"),
-      "next/server": path.resolve(__dirname, "node_modules/next/server"),
-    },
-  },
   env: {
     NEXT_PUBLIC_BUILD_SHA:   process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "dev",
     NEXT_PUBLIC_BUILD_TIME:  new Date().toISOString(),
