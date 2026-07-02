@@ -99,10 +99,14 @@ export default function SettingsPage() {
         .eq("id", company.id);
       setCompany({ ...company, name: cName.trim(), base_currency: cCur });
     } else {
+      await supabase.from("erp_companies")
+        .insert({ name: cName.trim(), base_currency: cCur, owner_id: userId });
+      // Separate select — trigger must commit before erp_is_member returns true
       const { data } = await supabase.from("erp_companies")
-        .insert({ name: cName.trim(), base_currency: cCur, owner_id: userId })
         .select("id, name, base_currency")
-        .single();
+        .eq("owner_id", userId)
+        .limit(1)
+        .maybeSingle();
       if (data) {
         setCompany(data);
         await supabase.from("erp_units")
