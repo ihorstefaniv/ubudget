@@ -71,6 +71,12 @@ const PROD_TYPE_META: Record<string, string> = {
 
 const WRITEOFF_REASONS = ["Пошкоджено", "Протермінувалось", "Виробничі потреби", "Власне використання", "Втрата", "Інше"];
 
+const PRODUCT_TYPES = [
+  { value: "product",  label: "Товар"    },
+  { value: "material", label: "Матеріал" },
+  { value: "service",  label: "Послуга"  },
+];
+
 const MOVE_INIT = { type: "in", product_id: "", warehouse_id: "", to_warehouse_id: "", qty: "", price: "", currency: "UAH", counterparty_id: "", reason: "", note: "", date: new Date().toISOString().split("T")[0] };
 const PROD_INIT = { name: "", sku: "", type: "product", category: "", unit_id: "", price: "", cost_price: "", min_stock: "", description: "" };
 const WARE_INIT = { name: "", address: "" };
